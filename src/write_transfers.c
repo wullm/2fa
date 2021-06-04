@@ -87,6 +87,7 @@ void write_transfer_functions(struct model *m, struct units *us,
     /* Fraction of non-relativistic massive neutrinos in matter density */
     const double a_today = 1.0;
     const double f_nu_nr_0 = strooklat_interp(&spline_tab, tab->f_nu_nr, a_today);
+    const double f_b = m->Omega_b / (m->Omega_c + m->Omega_b);
     
     /* Hubble rate at the starting redshift */
     const double H_start = strooklat_interp(&spline_tab, tab->Hvec, a_start);
@@ -99,7 +100,7 @@ void write_transfer_functions(struct model *m, struct units *us,
     FILE *f = fopen(fname, "w");
         
     /* Print a header row */             
-    fprintf(f, "# Transfer functions at z = %.10g, a = %.10g\n", 1./a_start - 1., a_start);              
+    fprintf(f, "# Transfer functions at z = %.10g, a = %.10g, f_nu_nr_0 = %.10g, f_b/(f_b + f_c) = %.10g\n", 1./a_start - 1., a_start, f_nu_nr_0, f_b);
     fprintf(f, "# k delta_cdm delta_b delta_g delta_ur delta_ncdm delta_tot dummy dummy theta_ncdm theta_cdm theta_b theta_bc\n");
                                    
     /* For each wavenumber */
@@ -135,12 +136,22 @@ void write_transfer_functions(struct model *m, struct units *us,
         double Tb_start = Tb_final * gfac->Tb[i];
         double Tn_start = Tn_final * gfac->Tn[i];
         
-        /* Use the weighted average factor for the total density */
-        double f_b = m->Omega_b / (m->Omega_c + m->Omega_b);
-        double Dcb = (1.0 - f_b) * gfac->Dc[i] + f_b * gfac->Db[i];
-        double Dm = (1.0 - f_nu_nr_0) * Dcb + f_nu_nr_0 * gfac->Dn[i];
-        double Dtot_start = Dtot_final * Dm;
+        // /* Compute the weighted average growth factor ratio for cdm+b+nu */
+        // double Dcb_ratio = (1.0 - f_b) * gfac->Dc[i] + f_b * gfac->Db[i];
+        // double Dm_ratio = (1.0 - f_nu_nr_0) * Dcb_ratio + f_nu_nr_0 * gfac->Dn[i];
+        // 
+        // /* Use the weighted average factor for the total density */
+        // double Dcb_final = (1.0 - f_b) * Dc_final + f_b * Db_final;
+        // double Dcbn_final = (1.0 - f_nu_nr_0) * Dcb_final + f_nu_nr_0 * Dn_final;
+        // 
+        // /* The contributions not due to cdm, baryons or massive neutrinos */
+        // double Dtot_remainder_final = Dtot_final - Dcbn_final;
         
+        /* Use the weighted average of the rescaled parts */
+        double Dcb_start = (1.0 - f_b) * Dc_start + f_b * Db_start;
+        double Dm_start = (1.0 - f_nu_nr_0) * Dcb_start + f_nu_nr_0 * Dn_start;
+        // double Dtot_start = Dcbn_start + Dtot_remainder_final * Dm_ratio;
+                
         // printf("%g %g %g %g %g %g %g\n", k, gfac->Dc[i], gfac->Db[i], gfac->Dn[i], Dc/Dc_final, Db/Db_final, Dn/Dn_final);
         // printf("%g %g %g %g %g %g %g\n", k, gfac->Tc[i], gfac->Tb[i], gfac->Tn[i], Tc/Tc_final, Tb/Tb_final, Tn/Tn_final);
         // printf("# k delta_cdm delta_b delta_g delta_ur delta_ncdm delta_tot dummy dummy theta_ncdm theta_cdm theta_b theta_bc\n");
@@ -166,7 +177,7 @@ void write_transfer_functions(struct model *m, struct units *us,
         if (export_original) {
             fprintf(f, "%.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", k, Dc, Db, Dg, Dur, Dn, Dtot, 0.0, 0.0, Tn, Tc, Tb, Tb - Tc);
         } else {
-            fprintf(f, "%.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", k, Dc_start, Db_start, Dg, Dur, Dn_start, Dtot_start, 0.0, 0.0, Tn_start, Tc_start, Tb_start, Tb_start - Tc_start);
+            fprintf(f, "%.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g %.10g\n", k, Dc_start, Db_start, Dg, Dur, Dn_start, Dm_start, 0.0, 0.0, Tn_start, Tc_start, Tb_start, Tb_start - Tc_start);
         }
     }
     
@@ -186,7 +197,6 @@ void write_transfer_functions(struct model *m, struct units *us,
         if (k < 1.0 * MPC_METRES / us->UnitLengthMetres) continue;
         
         /* Use the weighted average factor for the total density */
-        double f_b = m->Omega_b / (m->Omega_c + m->Omega_b);
         double Dcb = (1.0 - f_b) * gfac->Dc[i] + f_b * gfac->Db[i];
         double Dm = (1.0 - f_nu_nr_0) * Dcb + f_nu_nr_0 * gfac->Dn[i];
                 
@@ -213,6 +223,9 @@ void write_transfer_functions(struct model *m, struct units *us,
     printf("gm(a_start) = %.10g = dlog(Dm)/dlog(a)\n", gm_asymptotic);
     printf("H(a_start)  = %.10g 1/U_T\n", H_start);
     printf("            = %.10g km/s/Mpc\n", H_kms_Mpc);
+    printf("\n");
+    printf("f_nu_nr_0     = %.10g\n", f_nu_nr_0);
+    printf("f_b/(f_b+f_c) = %.10g\n", f_b);
     
     /* Free the perturbation splines */
     free_strooklat_spline(&spline_a);
