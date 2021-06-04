@@ -77,6 +77,7 @@ int main(int argc, char *argv[]) {
     m.T_CMB_0 = 2.7255;
     m.w0 = -1.0;
     m.wa = 0.0;
+    m.sim_neutrino_nonrel_masses = 1;
     
     printf("Integrating cosmological tables.\n");
     
@@ -94,11 +95,18 @@ int main(int argc, char *argv[]) {
     integrate_fluid_equations(&m, &us, &tab, &ptdat, &gfac, a_start, a_final); 
     
     /* Print the results */
-    printf("Relative scaling of:\n");
-    printf("delta_c delta_b delta_n theta_c theta_b theta_n:\n");
-    for (int i=0; i<gfac.nk; i++) {
-        printf("%g %g %g %g %g %g %g\n", gfac.k[i], gfac.Dc[i], gfac.Db[i], gfac.Dn[i], gfac.gc[i], gfac.gb[i], gfac.gn[i]);
-    }
+    // printf("Relative scaling of:\n");
+    // printf("delta_c delta_b delta_n theta_c theta_b theta_n:\n");
+    // for (int i=0; i<gfac.nk; i++) {
+    //     printf("%g %g %g %g %g %g %g\n", gfac.k[i], gfac.Dc[i], gfac.Db[i], gfac.Dn[i], gfac.gc[i], gfac.gb[i], gfac.gn[i]);
+    // }
+    
+    printf("\n");
+    
+    /* Write transfer functions */
+    char transfer_fname[100] = "transfer.txt";
+    write_transfer_functions(&m, &us, &tab, &ptdat, &gfac, a_start, a_final, transfer_fname); 
+    
     
     /* Free the results */
     free_growth_factors(&gfac);   

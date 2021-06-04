@@ -17,37 +17,18 @@
  *
  ******************************************************************************/
 
-#ifndef COSMOLOGY_TABLES_H
-#define COSMOLOGY_TABLES_H
+#ifndef WRITE_TRANSFERS_H
+#define WRITE_TRANSFERS_H
 
-struct model {
-    double h;
-    double Omega_b;
-    double Omega_c;
-    double Omega_k;
-    double N_ur;
-    int N_nu;
-    double *M_nu;
-    double *deg_nu;
-    double T_nu_0;
-    double T_CMB_0;
-    double w0;
-    double wa;
-    
-    /* Do the simulation particles not have masses that vary with w_nu(a)? */
-    int sim_neutrino_nonrel_masses;
-};
+#include "../include/perturb_data.h"
+#include "../include/input.h"
+#include "../include/fluid_equations.h"
 
-struct cosmology_tables {
-    double *avec;
-    double *Avec;
-    double *Bvec;
-    double *Hvec;
-    double *f_nu_nr;
-    int size;
-};
+void write_transfer_functions(struct model *m, struct units *us,
+                              struct cosmology_tables *tab,
+                              struct perturb_data *ptdat,
+                              struct growth_factors *gfac,
+                              double a_start, double a_final,
+                              char fname[100]);
 
-void integrate_cosmology_tables(struct model *m, struct units *us,
-                                struct cosmology_tables *tab, int size);
-void free_cosmology_tables(struct cosmology_tables *tab);
 #endif

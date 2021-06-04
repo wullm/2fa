@@ -58,11 +58,11 @@ int func (double loga, const double y[], double f[], void *params) {
     double D_cb = (1.0 - f_b) * y[0] + f_b * y[2];
         
     f[0] = -y[1];
-    f[1] = (A * y[1] + B * ((1.0 - f_nu_nr) * D_cb + f_nu_nr * y[4]));
+    f[1] = A * y[1] + B * ((1.0 - f_nu_nr) * D_cb + f_nu_nr * y[4]);
     f[2] = -y[3];
-    f[3] =  (A * y[3] + B * ((1.0 - f_nu_nr) * D_cb + f_nu_nr * y[4]));
+    f[3] =  A * y[3] + B * ((1.0 - f_nu_nr) * D_cb + f_nu_nr * y[4]);
     f[4] = -y[5];
-    f[5] = (A * y[5] + B * ((1.0 - f_nu_nr) * D_cb + (f_nu_nr - (k*k)/k_fs2)*y[4]));
+    f[5] = A * y[5] + B * ((1.0 - f_nu_nr) * D_cb + (f_nu_nr - (k*k)/k_fs2)*y[4]);
     
     return GSL_SUCCESS;
 }
@@ -82,9 +82,9 @@ void integrate_fluid_equations(struct model *m, struct units *us,
     double *d_cdm_array = ptdat->delta + ptdat->tau_size * ptdat->k_size * d_cdm;
     double *d_b_array = ptdat->delta + ptdat->tau_size * ptdat->k_size * d_b;
     double *d_ncdm_array = ptdat->delta + ptdat->tau_size * ptdat->k_size * d_ncdm;
-                                   
-    /* Starting redshift */
-    double a_today = 1.0;
+                             
+    /* The wavenumbers and redshifts in the perturbation vector */
+    double *kvec = ptdat->k;
     double *zvec = ptdat->redshift;
     
     /* We will differentiate the density perturbations at a_start */
@@ -101,9 +101,6 @@ void integrate_fluid_equations(struct model *m, struct units *us,
     struct strooklat spline_tab = {tab->avec, tab->size};
     init_strooklat_spline(&spline_tab, 100);    
     
-    /* Fraction of non-relativistic massive neutrinos in matter density today */
-    double f_nu_nr_0 = strooklat_interp(&spline_tab, tab->f_nu_nr, a_today);
-    
     /* Compute the Hubble ratio */
     double H_start = strooklat_interp(&spline_tab, tab->Hvec, a_start);
     double H_final = strooklat_interp(&spline_tab, tab->Hvec, a_final);
@@ -113,9 +110,6 @@ void integrate_fluid_equations(struct model *m, struct units *us,
     for (int i=0; i<ptdat->tau_size; i++) {
        avec[i] = 1.0 / (1.0 + zvec[i]);
     }
-                                   
-    /* The wavenumbers in the perturbation vector */
-    double *kvec = ptdat->k;
 
     /* Create a scale factor spline for the perturbation factor */
     struct strooklat spline_a = {avec, ptdat->tau_size};
@@ -137,6 +131,9 @@ void integrate_fluid_equations(struct model *m, struct units *us,
     gfac->Dc = malloc(ptdat->k_size * sizeof(double));
     gfac->Db = malloc(ptdat->k_size * sizeof(double));
     gfac->Dn = malloc(ptdat->k_size * sizeof(double));
+    gfac->Tc = malloc(ptdat->k_size * sizeof(double));
+    gfac->Tb = malloc(ptdat->k_size * sizeof(double));
+    gfac->Tn = malloc(ptdat->k_size * sizeof(double));
     gfac->gc = malloc(ptdat->k_size * sizeof(double));
     gfac->gb = malloc(ptdat->k_size * sizeof(double));
     gfac->gn = malloc(ptdat->k_size * sizeof(double));
@@ -181,12 +178,6 @@ void integrate_fluid_equations(struct model *m, struct units *us,
         dDn_dloga -= strooklat_interp_2d(&spline_a, &spline_k, d_ncdm_array, a_pp, k);
         dDn_dloga /= 12.0 * delta_log_a;
 
-        // printf("\n");    
-        // printf("(beta_c, f_c) = (%g, %g)\n", beta_c, dDc_dloga / Dc);
-        // printf("(beta_b, f_b) = (%g, %g)\n", beta_b, dDb_dloga / Db);
-        // printf("(beta_n, f_n) = (%g, %g)\n", beta_n, dDn_dloga / Dn);
-        // printf("Dm_0 = %g \n", Dm_0);
-
         /* Growth rates */
         double gc = dDc_dloga / Dc;
         double gb = dDb_dloga / Db;
@@ -196,16 +187,14 @@ void integrate_fluid_equations(struct model *m, struct units *us,
         double y[6] = {beta_c, -gc * beta_c, beta_b, -gb * beta_b, beta_n, -gn * beta_n};
         double loga = log(a_start);
         double loga_final = log(a_final);
-        // printf("%g %g %g %g %g %g\n", y[0], y[1], y[2], y[3], y[4], y[5]);
 
         /* Integrate */
         double tol = 1e-12;
-        double hstart = 1e-6;
+        double hstart = 1e-12;
         gsl_odeiv2_system sys = {func, NULL, 6, &odep};
         gsl_odeiv2_driver *d = gsl_odeiv2_driver_alloc_y_new(&sys, gsl_odeiv2_step_rk8pd, hstart, tol, tol);
         gsl_odeiv2_driver_apply(d, &loga, loga_final, y);
         gsl_odeiv2_driver_free(d);
-        // printf("%g %g %g %g %g %g\n", y[0], y[1], y[2], y[3], y[4], y[5]);
 
         /* Extract the result */
         double Dc_final = y[0];
@@ -215,26 +204,16 @@ void integrate_fluid_equations(struct model *m, struct units *us,
         double gb_final = -y[3]/y[2];
         double gn_final = -y[5]/y[4];
 
-        /* Evaluate the total matter growth factor */
-        double Dcb_final = odep.f_b * Db_final + (1.0 - odep.f_b) * Dc_final;
-        double Dm_final = (1.0 - f_nu_nr_0) * Dcb_final + f_nu_nr_0 * Dn_final;
-
-        /* Normalize */
-        Dc_final /= Dm_final;
-        Db_final /= Dm_final;
-        Dn_final /= Dm_final;
-
-        // printf("%g %g %g %g\n", k, Dc_final, Db_final, Dn_final);
-        // printf("%g %g %g %g\n", k, beta_c / Dm_final, beta_b / Dm_final, beta_n / Dm_final);
-        // printf("%g %g %g %g\n", k, fc_final, fb_final, fn_final);
-        
-        /* Store the results */
-        gfac->Dc[i] = beta_c / Dm_final;
-        gfac->Db[i] = beta_b / Dm_final;
-        gfac->Dn[i] = beta_n / Dm_final;
-        gfac->gc[i] = (gc_final / gc) * (H_final * a_final) / (H_start * a_start);
-        gfac->gb[i] = (gb_final / gb) * (H_final * a_final) / (H_start * a_start);
-        gfac->gn[i] = (gn_final / gn) * (H_final * a_final) / (H_start * a_start);
+        /* Store the results (relative density and velocity transfer functions)*/
+        gfac->Dc[i] = beta_c / Dc_final;
+        gfac->Db[i] = beta_b / Db_final;
+        gfac->Dn[i] = beta_n / Dn_final;
+        gfac->Tc[i] = (gc / gc_final) * (H_start * a_start) / (H_final * a_final) * gfac->Dc[i];
+        gfac->Tb[i] = (gb / gb_final) * (H_start * a_start) / (H_final * a_final) * gfac->Db[i];
+        gfac->Tn[i] = (gn / gn_final) * (H_start * a_start) / (H_final * a_final) * gfac->Dn[i];
+        gfac->gc[i] = gc;
+        gfac->gb[i] = gb;
+        gfac->gn[i] = gn;
     }
     
     /* Free the perturbation splines */
@@ -250,6 +229,9 @@ void free_growth_factors(struct growth_factors *gfac) {
     free(gfac->Dc);
     free(gfac->Db);
     free(gfac->Dn);
+    free(gfac->Tc);
+    free(gfac->Tb);
+    free(gfac->Tn);
     free(gfac->gc);
     free(gfac->gb);
     free(gfac->gn);

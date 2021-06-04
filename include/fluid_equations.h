@@ -25,13 +25,21 @@
 #include "../include/cosmology_tables.h"
 
 struct growth_factors {
+    /* Wavenumbers */
     double *k;
+    /* Density transfer function ratios D_start(k) / D_final(k) */
     double *Dc;
     double *Db;
     double *Dn;
+    /* Velocity transfer function ratios T_start(k) / T_final(k) */
+    double *Tc;
+    double *Tb;
+    double *Tn;
+    /* Growth rates */
     double *gc;
     double *gb;
     double *gn;
+    /* Size of the vectors */
     int nk;
 };
 

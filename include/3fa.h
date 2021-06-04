@@ -26,5 +26,6 @@
 #include "cosmology_tables.h"
 #include "primordial.h"
 #include "fluid_equations.h"
+#include "write_transfers.h"
 
 #endif

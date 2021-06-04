@@ -156,15 +156,13 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
     /* Other density components */
     const double Omega_c = m->Omega_c;
     const double Omega_b = m->Omega_b;
+    const double Omega_cb = Omega_c + Omega_b;
     const double Omega_k = m->Omega_k;
     
     /* Next, calculate the ultra-relativistic density */
     const double ratio = 4. / 11.;
     const double ratio4 = ratio * ratio * ratio * ratio;
     const double Omega_ur = m->N_ur * (7. / 8.) * cbrt(ratio4) * Omega_CMB;
-    
-    printf("rho_crit = %g, Omega_CMB = %g\n", rho_crit_0, Omega_CMB);
-    printf("Omega_ur_0 = %e, N_ur = %g\n", Omega_ur, m->N_ur);
     
     /* Now, we want to evaluate the neutrino density and equation of state */
     const int N_nu = m->N_nu;
@@ -223,7 +221,7 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
         /* Fraction of non-relativistic neutrinos in matter */
         tab->f_nu_nr[i] = Omega_nu_nr[i] / Omega_m[i] / tab->avec[i];
     }
-    
+
     /* Close the universe */
     const double Omega_nu_0 = strooklat_interp(&spline, Omega_nu_tot, 1.0);
     const double Omega_lambda = 1.0 - Omega_nu_0 - Omega_k - Omega_ur - Omega_CMB - Omega_c - Omega_b;
@@ -251,6 +249,20 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
             dHdloga[i] /= 12.0 * delta_log_a;
         } else {
             dHdloga[i] = (tab->Hvec[i] - tab->Hvec[i-1]) / delta_log_a;
+        }
+    }
+    
+    /* If neutrino particle masses are not varied in the N-body simulation to
+     * account for the relativistic energy density, we need to replace the
+     * previous calculation of Omega_nu(a) with Omega_nu_0. However, this
+     * must be done after calculating the Hubble rate, where we do take
+     * the relativistic contribution into account. */
+    if (m->sim_neutrino_nonrel_masses) {
+        for (int i=0; i<size; i++) {
+            Omega_m[i] = Omega_cb + Omega_nu_0;
+            Omega_nu_tot[i] = Omega_nu_0;
+            Omega_nu_nr[i] = Omega_nu_0;
+            tab->f_nu_nr[i] = Omega_nu_0 / (Omega_cb + Omega_nu_0);
         }
     }
     
