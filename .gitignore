@@ -1,0 +1,4 @@
+lib/*.o
+3fa
+*.hdf5
+parser/*.o
