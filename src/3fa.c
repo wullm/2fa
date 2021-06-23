@@ -94,31 +94,14 @@ int main(int argc, char *argv[]) {
     struct growth_factors gfac;
     integrate_fluid_equations(&m, &us, &tab, &ptdat, &gfac, a_start, a_final);
 
-    /* Print the results */
-    // printf("Relative scaling of:\n");
-    // printf("delta_c delta_b delta_n theta_c theta_b theta_n:\n");
-    // for (int i=0; i<gfac.nk; i++) {
-    //     printf("%g %g %g %g %g %g %g\n", gfac.k[i], gfac.Dc[i], gfac.Db[i], gfac.Dn[i], gfac.gc[i], gfac.gb[i], gfac.gn[i]);
-    // }
-
     printf("\n");
 
     /* Write transfer functions */
     char transfer_fname[100] = "transfer.txt";
     write_transfer_functions(&m, &us, &tab, &ptdat, &gfac, a_start, a_final, transfer_fname);
 
-
     /* Free the results */
     free_growth_factors(&gfac);
-
-    // /* Also find the cdm density at z = 0 */
-    // double d_c_0 = strooklat_interp_2d(&spline_a, &spline_k, d_ncdm_array, 1.0, k);
-    // /* The power spectrum at this scale is */
-    // const double A_s = 2.087599637e-09;
-    // const double n_s = 0.97774;
-    // const double k_pivot = 0.05;
-    // double Pk = primordialPower(k, A_s, n_s, k_pivot) * d_c_0 * d_c_0;
-    // printf("Pk = %g %g\n", Pk, d_c_0);
 
     /* Free the cosmological tables */
     free_cosmology_tables(&tab);
