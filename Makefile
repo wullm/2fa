@@ -19,7 +19,7 @@ LIBRARIES = $(INI_PARSER) $(STD_LIBRARIES) $(FFTW_LIBRARIES) $(HDF5_LIBRARIES) $
 CFLAGS = -Wall -Wshadow=global -fopenmp -march=native -O4
 LDFLAGS =
 
-ELEMENTS = input cosmology_tables perturb_data titles primordial fluid_equations write_transfers
+ELEMENTS = input cosmology_tables perturb_data titles primordial fluid_equations write_transfers units
 PROGRAMS = 3fa
 
 OBJECTS=$(patsubst %, lib/%.o, $(ELEMENTS))
@@ -32,7 +32,7 @@ lib/%.o: src/%.c include/*.h
 	$(GCC) $< -c -o $@ $(INCLUDES) $(CFLAGS)
 
 all: minIni $(PROGRAMS)
-	
+
 minIni:
 	cd parser && make
 
