@@ -33,7 +33,7 @@ struct model {
     double T_CMB_0;
     double w0;
     double wa;
-    
+
     /* Do the simulation particles not have masses that vary with w_nu(a)? */
     int sim_neutrino_nonrel_masses;
 };
@@ -46,6 +46,8 @@ struct cosmology_tables {
     double *f_nu_nr;
     int size;
 };
+
+double get_H_of_a(struct cosmology_tables *tab, double a);
 
 void integrate_cosmology_tables(struct model *m, struct units *us,
                                 struct cosmology_tables *tab, int size);
