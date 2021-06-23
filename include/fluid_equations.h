@@ -35,7 +35,7 @@ struct growth_factors {
     double *Tc;
     double *Tb;
     double *Tn;
-    /* Growth rates */
+    /* Growth rates at a_start */
     double *gc;
     double *gb;
     double *gn;

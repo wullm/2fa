@@ -44,26 +44,26 @@ int func (double loga, const double y[], double f[], void *params) {
     struct ode_params *p = (struct ode_params *) params;
     struct strooklat *spline = p->spline;
     struct cosmology_tables *tab = p->tab;
-    
+
     double a = exp(loga);
     double A = strooklat_interp(spline, tab->Avec, a);
     double B = strooklat_interp(spline, tab->Bvec, a);
     double H = strooklat_interp(spline, tab->Hvec, a);
     double f_nu_nr = strooklat_interp(spline, tab->f_nu_nr, a);
-    
+
     double c_s = p->c_s / a;
     double k = p->k;
     double k_fs2 = -B * H * H / (c_s * c_s) * (a * a);
     double f_b = p->f_b;
     double D_cb = (1.0 - f_b) * y[0] + f_b * y[2];
-        
+
     f[0] = -y[1];
     f[1] = A * y[1] + B * ((1.0 - f_nu_nr) * D_cb + f_nu_nr * y[4]);
     f[2] = -y[3];
     f[3] =  A * y[3] + B * ((1.0 - f_nu_nr) * D_cb + f_nu_nr * y[4]);
     f[4] = -y[5];
     f[5] = A * y[5] + B * ((1.0 - f_nu_nr) * D_cb + (f_nu_nr - (k*k)/k_fs2)*y[4]);
-    
+
     return GSL_SUCCESS;
 }
 
@@ -72,7 +72,7 @@ void integrate_fluid_equations(struct model *m, struct units *us,
                                struct perturb_data *ptdat,
                                struct growth_factors *gfac,
                                double a_start, double a_final) {
-    
+
     /* Find the necessary titles in the perturbation vector */
     int d_cdm = findTitle(ptdat->titles, "d_cdm", ptdat->n_functions);
     int d_b = findTitle(ptdat->titles, "d_b", ptdat->n_functions);
@@ -82,29 +82,29 @@ void integrate_fluid_equations(struct model *m, struct units *us,
     double *d_cdm_array = ptdat->delta + ptdat->tau_size * ptdat->k_size * d_cdm;
     double *d_b_array = ptdat->delta + ptdat->tau_size * ptdat->k_size * d_b;
     double *d_ncdm_array = ptdat->delta + ptdat->tau_size * ptdat->k_size * d_ncdm;
-                             
+
     /* The wavenumbers and redshifts in the perturbation vector */
     double *kvec = ptdat->k;
     double *zvec = ptdat->redshift;
-    
+
     /* We will differentiate the density perturbations at a_start */
     double log_a_start = log(a_start);
     double delta_log_a = 0.002;
-                                   
+
     /* Nearby scale factors */
     double a_mm = exp(log_a_start - 2.0 * delta_log_a);
     double a_m = exp(log_a_start - 1.0 * delta_log_a);
     double a_p = exp(log_a_start + 1.0 * delta_log_a);
     double a_pp = exp(log_a_start + 2.0 * delta_log_a);
-        
+
     /* Create a scale factor spline for the cosmological tables */
     struct strooklat spline_tab = {tab->avec, tab->size};
-    init_strooklat_spline(&spline_tab, 100);    
-    
+    init_strooklat_spline(&spline_tab, 100);
+
     /* Compute the Hubble ratio */
     double H_start = strooklat_interp(&spline_tab, tab->Hvec, a_start);
     double H_final = strooklat_interp(&spline_tab, tab->Hvec, a_final);
-    
+
     /* The scale factors in the perturbation vector */
     double *avec = malloc(ptdat->tau_size * sizeof(double));
     for (int i=0; i<ptdat->tau_size; i++) {
@@ -113,19 +113,19 @@ void integrate_fluid_equations(struct model *m, struct units *us,
 
     /* Create a scale factor spline for the perturbation factor */
     struct strooklat spline_a = {avec, ptdat->tau_size};
-    init_strooklat_spline(&spline_a, 100);    
+    init_strooklat_spline(&spline_a, 100);
 
     /* Create a wavenumber spline for the perturbation vector */
     struct strooklat spline_k = {kvec, ptdat->k_size};
-    init_strooklat_spline(&spline_k, 100);    
-       
+    init_strooklat_spline(&spline_k, 100);
+
     /* Prepare the parameters for the fluid ODEs */
     struct ode_params odep;
     odep.spline = &spline_tab;
     odep.tab = tab;
     odep.f_b = m->Omega_b / (m->Omega_c + m->Omega_b);
     odep.c_s = 134.423 / m->M_nu[0] * KM_METRES / us->UnitLengthMetres * us->UnitTimeSeconds;
-    
+
     /* Allocate tables for the results */
     gfac->k = malloc(ptdat->k_size * sizeof(double));
     gfac->Dc = malloc(ptdat->k_size * sizeof(double));
@@ -138,10 +138,10 @@ void integrate_fluid_equations(struct model *m, struct units *us,
     gfac->gb = malloc(ptdat->k_size * sizeof(double));
     gfac->gn = malloc(ptdat->k_size * sizeof(double));
     gfac->nk = ptdat->k_size;
-    
+
     /* Copy the wavenumbers from the perturbation file */
     memcpy(gfac->k, ptdat->k, ptdat->k_size * sizeof(double));
-                                   
+
     /* For each wavenumber */
     for (int i=0; i<ptdat->k_size; i++) {
         /* The wavenumber of interest */
@@ -157,7 +157,8 @@ void integrate_fluid_equations(struct model *m, struct units *us,
         double beta_c = Dc / Dc;
         double beta_b = Db / Dc;
         double beta_n = Dn / Dc;
-           
+
+
         /* Compute the derivatives */
         double dDc_dloga = 0;
         dDc_dloga += strooklat_interp_2d(&spline_a, &spline_k, d_cdm_array, a_mm, k);
@@ -178,7 +179,7 @@ void integrate_fluid_equations(struct model *m, struct units *us,
         dDn_dloga -= strooklat_interp_2d(&spline_a, &spline_k, d_ncdm_array, a_pp, k);
         dDn_dloga /= 12.0 * delta_log_a;
 
-        /* Growth rates */
+        /* Growth rates at a_start */
         double gc = dDc_dloga / Dc;
         double gb = dDb_dloga / Db;
         double gn = dDn_dloga / Dn;
@@ -215,10 +216,10 @@ void integrate_fluid_equations(struct model *m, struct units *us,
         gfac->gb[i] = gb;
         gfac->gn[i] = gn;
     }
-    
+
     /* Free the perturbation splines */
     free_strooklat_spline(&spline_a);
-    free_strooklat_spline(&spline_k);  
+    free_strooklat_spline(&spline_k);
     free_strooklat_spline(&spline_tab);
     free(avec);
 }

@@ -40,29 +40,29 @@ int main(int argc, char *argv[]) {
     /* Read options */
     const char *fname = argv[1];
     printf("3FA initial conditions.\n");
-    
+
     /* Timer */
     struct timeval time_stop, time_start;
     gettimeofday(&time_start, NULL);
-    
+
     /* 3FA structures */
     struct params pars;
     struct units us;
     struct perturb_data ptdat;
     struct perturb_params ptpars;
-    
+
     /* Read parameter file for parameters, units */
     readParams(&pars, fname);
     readUnits(&us, fname);
-    
+
     /* Read the perturbation data file */
     readPerturb(&pars, &us, &ptdat);
     readPerturbParams(&pars, &us, &ptpars);
-    
+
     /* Our choice of neutrino masses */
     double M_nu[1] = {0.067666666};
     double deg_nu[1] = {3.0};
-    
+
     /* Specify the cosmological model */
     struct model m;
     m.h = 0.6771;
@@ -78,39 +78,39 @@ int main(int argc, char *argv[]) {
     m.w0 = -1.0;
     m.wa = 0.0;
     m.sim_neutrino_nonrel_masses = 1;
-    
+
     printf("Integrating cosmological tables.\n");
-    
+
     /* Integrate the cosmological tables */
     struct cosmology_tables tab;
     integrate_cosmology_tables(&m, &us, &tab, 1000);
-    
+
     printf("Integrating fluid equations.\n");
-    
+
     /* Integrate the fluid equations */
     double z_start = 31.0;
     double a_start = 1.0 / (1 + z_start);
     double a_final = 1.0;
     struct growth_factors gfac;
-    integrate_fluid_equations(&m, &us, &tab, &ptdat, &gfac, a_start, a_final); 
-    
+    integrate_fluid_equations(&m, &us, &tab, &ptdat, &gfac, a_start, a_final);
+
     /* Print the results */
     // printf("Relative scaling of:\n");
     // printf("delta_c delta_b delta_n theta_c theta_b theta_n:\n");
     // for (int i=0; i<gfac.nk; i++) {
     //     printf("%g %g %g %g %g %g %g\n", gfac.k[i], gfac.Dc[i], gfac.Db[i], gfac.Dn[i], gfac.gc[i], gfac.gb[i], gfac.gn[i]);
     // }
-    
+
     printf("\n");
-    
+
     /* Write transfer functions */
     char transfer_fname[100] = "transfer.txt";
-    write_transfer_functions(&m, &us, &tab, &ptdat, &gfac, a_start, a_final, transfer_fname); 
-    
-    
+    write_transfer_functions(&m, &us, &tab, &ptdat, &gfac, a_start, a_final, transfer_fname);
+
+
     /* Free the results */
-    free_growth_factors(&gfac);   
-        
+    free_growth_factors(&gfac);
+
     // /* Also find the cdm density at z = 0 */
     // double d_c_0 = strooklat_interp_2d(&spline_a, &spline_k, d_ncdm_array, 1.0, k);
     // /* The power spectrum at this scale is */
@@ -119,15 +119,15 @@ int main(int argc, char *argv[]) {
     // const double k_pivot = 0.05;
     // double Pk = primordialPower(k, A_s, n_s, k_pivot) * d_c_0 * d_c_0;
     // printf("Pk = %g %g\n", Pk, d_c_0);
-    
+
     /* Free the cosmological tables */
     free_cosmology_tables(&tab);
-    
+
     /* Clean up */
     cleanParams(&pars);
     cleanPerturb(&ptdat);
     cleanPerturbParams(&ptpars);
-        
+
     /* Timer */
     gettimeofday(&time_stop, NULL);
     long unsigned microsec = (time_stop.tv_sec - time_start.tv_sec) * 1000000
