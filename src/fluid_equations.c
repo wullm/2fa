@@ -143,7 +143,8 @@ void integrate_fluid_equations(struct model *m, struct units *us,
     memcpy(gfac->k, ptdat->k, ptdat->k_size * sizeof(double));
 
     /* For each wavenumber */
-    for (int i=0; i<ptdat->k_size; i++) {
+    for (int i=0; i<10; i++) {
+    // for (int i=0; i<ptdat->k_size; i++) {
         /* The wavenumber of interest */
         double k = kvec[i];
         odep.k = k;

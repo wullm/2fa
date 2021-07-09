@@ -95,6 +95,57 @@ int main(int argc, char *argv[]) {
     integrate_fluid_equations(&m, &us, &tab, &ptdat, &gfac, a_start, a_final);
 
     printf("\n");
+    printf("Integrating second order fluid equations.\n");
+
+    /* Begin and end for the second order growth factor integration */
+    double a_start2 = 1.0 / 128.0;
+    double a_end2 = 1.0; // / 32.0;
+    struct growth_factors_2 gfac2;
+    integrate_fluid_equations_2(&m, &us, &tab, &ptdat, &gfac, &gfac2, a_start2, a_end2);
+
+
+    /* Read the first order potential field on each MPI rank */
+    double *box;
+    double BoxLen;
+    int N;
+
+    char field_fname[50] = "phi.hdf5";
+    printf("Reading input field from %s.\n", field_fname);
+
+    /* Initialize MPI for distributed memory parallelization */
+    MPI_Init(&argc, &argv);
+    fftw_mpi_init();
+
+    /* Get the dimensions of the cluster */
+    int rank, MPI_Rank_Count;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &MPI_Rank_Count);
+
+    readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, field_fname);
+
+    printf("(N,L,x[0]) = (%d, %g, %g)\n", N, BoxLen, box[0]);
+
+    /* Allocate an output grid */
+    double *out = malloc(N * N * N * sizeof(double));
+
+    /* Do the convolution */
+    // convolve_fft(N, BoxLen, box, out);
+    convolve(N, BoxLen, box, out, &gfac2);
+
+    printf("out[0] = %g\n", out[0]);
+
+    /* Export the output grid */
+    char out_fname[50] = "out.hdf5";
+    writeFieldFile(out, N, BoxLen, out_fname);
+    printf("Output written to '%s'.\n", out_fname);
+
+    free(out);
+    free(box);
+
+    /* Done with MPI parallelization */
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Finalize();
+
 
     /* Write transfer functions */
     char transfer_fname[100] = "transfer.txt";

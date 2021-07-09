@@ -43,11 +43,28 @@ struct growth_factors {
     int nk;
 };
 
+struct growth_factors_2 {
+    /* Wavenumbers */
+    double *k;
+    /* 2D grid of second order growth factors */
+    double *D2_A;
+    double *D2_B;
+    /* Size of the vectors */
+    int nk;
+};
+
+
 void integrate_fluid_equations(struct model *m, struct units *us,
                                struct cosmology_tables *tab,
                                struct perturb_data *ptdat,
                                struct growth_factors *gfac,
                                double a_start, double a_final);
+void integrate_fluid_equations_2(struct model *m, struct units *us,
+                                 struct cosmology_tables *tab,
+                                 struct perturb_data *ptdat,
+                                 struct growth_factors *gfac,
+                                 struct growth_factors_2 *gfac2,
+                                 double a_start, double a_final);
 void free_growth_factors(struct growth_factors *gfacl);
 
 #endif

@@ -17,18 +17,13 @@
  *
  ******************************************************************************/
 
-#ifndef TRFA_H
-#define TRFA_H
+#ifndef CONVOLVE_H
+#define CONVOLVE_H
 
-#include "input.h"
-#include "output.h"
-#include "cosmology_tables.h"
-#include "perturb_data.h"
-#include "cosmology_tables.h"
-#include "primordial.h"
-#include "fluid_equations.h"
-#include "write_transfers.h"
-#include "fft.h"
-#include "convolve.h"
+#include "../include/fluid_equations.h"
+
+void convolve(int N, double boxlen, const double *phi, double *out,
+              struct growth_factors_2 *gfac2);
+void convolve_fft(int N, double boxlen, const double *phi, double *out);
 
 #endif

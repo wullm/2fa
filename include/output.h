@@ -1,6 +1,6 @@
 /*******************************************************************************
- * This file is part of 3FA.
- * Copyright (c) 2021 Willem Elbers (whe@willemelbers.com)
+ * This file is part of Mitos.
+ * Copyright (c) 2020 Willem Elbers (whe@willemelbers.com)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,18 +17,20 @@
  *
  ******************************************************************************/
 
-#ifndef TRFA_H
-#define TRFA_H
+#ifndef OUTPUT_H
+#define OUTPUT_H
 
-#include "input.h"
-#include "output.h"
-#include "cosmology_tables.h"
-#include "perturb_data.h"
-#include "cosmology_tables.h"
-#include "primordial.h"
-#include "fluid_equations.h"
-#include "write_transfers.h"
-#include "fft.h"
-#include "convolve.h"
+#include <hdf5.h>
+
+/* General methods */
+hid_t openFile(const char *fname);
+hid_t createFile(const char *fname);
+int writeFieldHeader(double boxlen, hid_t h_file);
+
+hid_t openFile_MPI(MPI_Comm comm, const char *fname);
+
+/* Methods for contiguous arrays (analogous to MPI versions in output_mpi.h) */
+int writeFieldFile(const double *box, int N, double box_len, const char *fname);
+int writeFieldData(const double *box, hid_t h_file);
 
 #endif

@@ -34,7 +34,7 @@ struct strooklat {
     /* The x values of the data points to be interpolated */
     const double *x;
     /* The number of data points */
-    const int size;
+    int size;
     /* The last index returned */
     int last_index;
 
@@ -144,16 +144,16 @@ static inline int strooklat_find_x(struct strooklat *spline, double x, int *ind,
     double x_max = spline->x[sorted_id(0, size, !ascend)];
 
     /* Quickly return if the x value is out of bounds */
-    if (x > x_max) {
+    if (x >= x_max) {
         *ind = size - 2;
         *u = 1.0;
-    } else if (x < x_min) {
+    } else if (x <= x_min) {
         *ind = 0;
         *u = 0.0;
     }
 
     /* Quickly check the last index to see if it still works */
-    if (x > spline->x[sorted_id(spline->last_index, size, ascend)] &&
+    else if (x > spline->x[sorted_id(spline->last_index, size, ascend)] &&
             x <= spline->x[sorted_id(spline->last_index + 1, size, ascend)]) {
         *ind = spline->last_index;
     } else {
@@ -240,24 +240,24 @@ static inline double strooklat_interp_2d(struct strooklat *spline_x,
     int ind_x;
     double u_x;
     strooklat_find_x(spline_x, x, &ind_x, &u_x);
-    
+
     /* Find the bounding interval for y */
     int ind_y;
     double u_y;
     strooklat_find_x(spline_y, y, &ind_y, &u_y);
-    
+
     /* Determine the sizes and orderings of the two dimensions */
     int size_x = spline_x->size;
     int size_y = spline_y->size;
     int ascend_x = (spline_x->x[0] < spline_x->x[size_x - 1]);
     int ascend_y = (spline_y->x[0] < spline_y->x[size_y - 1]);
-    
+
     /* Retrieve the bounding values */
     int left_x = sorted_id(ind_x, size_x, ascend_x);
     int right_x = sorted_id(ind_x + 1, size_x, ascend_x);
     int left_y = sorted_id(ind_y, size_y, ascend_y);
     int right_y = sorted_id(ind_y + 1, size_y, ascend_y);
-    
+
     /* Retrieve the bounding values */
     double T11 = z[size_y * left_x + left_y];
     double T21 = z[size_y * left_x + right_y];
