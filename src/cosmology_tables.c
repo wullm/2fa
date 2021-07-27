@@ -233,6 +233,8 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
         tab->f_g[i] = (Omega_CMB + Omega_ur) / (Omega_cb + Omega_nu_0) / tab->avec[i];
     }
 
+    printf("f_nu_0 = %.10g\n", Omega_nu_0 / (Omega_cb + Omega_nu_0));
+
     /* Now, create a table with the Hubble rate */
     for (int i=0; i<size; i++) {
         /* Neglect all radiation and treat neutrinos non-relativistically */
@@ -264,7 +266,7 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
         double a = tab->avec[i];
         double H = tab->Hvec[i];
         tab->Avec[i] = -(2.0 + dHdloga[i] / H);
-        tab->Bvec[i] = -1.5 * (Omega_cb + Omega_nu_0) / (a * a * a) * (H_0 * H_0) / (H * H);
+        tab->Bvec[i] = -1.5 * Omega_cb / (a * a * a) * (H_0 * H_0) / (H * H);
     }
 
     free(Omega_nu_nr);
