@@ -187,7 +187,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                     if (k2k2 == 0.) continue;
                     
                     /* Skip irrelevant cells */
-                    // if (k2k2 >= k_cutoff2) continue;
+                    if (k2k2 >= k_cutoff2) continue;
                     
                     /* The first wavevector */
                     double k1x = (x1 > N/2) ? (x1 - N) * dk : x1 * dk;
