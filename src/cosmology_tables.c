@@ -262,8 +262,9 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
     tab->Bvec = malloc(size * sizeof(double));
     for (int i=0; i<size; i++) {
         double a = tab->avec[i];
-        tab->Avec[i] = -(2.0 + dHdloga[i] / tab->Hvec[i]);
-        tab->Bvec[i] = -1.5 * (Omega_cb + Omega_nu_0) / (a * a * a) / E2a[i];
+        double H = tab->Hvec[i];
+        tab->Avec[i] = -(2.0 + dHdloga[i] / H);
+        tab->Bvec[i] = -1.5 * (Omega_cb + Omega_nu_0) / (a * a * a) * (H_0 * H_0) / (H * H);
     }
 
     free(Omega_nu_nr);
