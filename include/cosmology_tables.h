@@ -43,13 +43,16 @@ struct cosmology_tables {
     double *Avec;
     double *Bvec;
     double *Hvec;
+    double *f_nu_tot;
     double *f_nu_nr;
+    double *f_g;
     int size;
 };
 
 double get_H_of_a(struct cosmology_tables *tab, double a);
 
 void integrate_cosmology_tables(struct model *m, struct units *us,
-                                struct cosmology_tables *tab, int size);
+                                struct cosmology_tables *tab, int size,
+                                const double a_min, const double a_max);
 void free_cosmology_tables(struct cosmology_tables *tab);
 #endif

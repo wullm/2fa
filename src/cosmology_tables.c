@@ -63,7 +63,8 @@ double E2(double a, double Omega_CMB, double Omega_ur, double Omega_nu,
 }
 
 void integrate_cosmology_tables(struct model *m, struct units *us,
-                                struct cosmology_tables *tab, int size) {
+                                struct cosmology_tables *tab, int size,
+                                const double a_min, const double a_max) {
 
 
     /* Prepare interpolation tables of F(y) and G(y) with y > 0 */
@@ -115,8 +116,6 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
     init_strooklat_spline(&spline_y, 100);
 
     /* We want to interpolate the scale factor */
-    const double a_min = 1.0 / 32;
-    const double a_max = 1.01;
     const double log_a_min = log(a_min);
     const double log_a_max = log(a_max);
     const double delta_log_a = (log_a_max - log_a_min) / size;
@@ -197,6 +196,8 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
     double *Omega_r = malloc(size * sizeof(double));
     double *Omega_m = malloc(size * sizeof(double));
     tab->f_nu_nr = malloc(size * sizeof(double));
+    tab->f_nu_tot = malloc(size * sizeof(double));
+    tab->f_g = malloc(size * sizeof(double));
 
     for (int i=0; i<size; i++) {
 
@@ -217,9 +218,6 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
              * Omega_nu is in fact Omega_nu * E^2 * a^4 */
             Omega_m[i] += (1.0 - 3.0 * w) * O_nu / tab->avec[i];
         }
-
-        /* Fraction of non-relativistic neutrinos in matter */
-        tab->f_nu_nr[i] = Omega_nu_nr[i] / Omega_m[i] / tab->avec[i];
     }
 
     /* Close the universe */
@@ -228,10 +226,17 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
     const double w0 = m->w0;
     const double wa = m->wa;
 
+    /* Compute neutrino (non-relativistic and total) and radiation fractions */
+    for (int i=0; i<size; i++) {
+        tab->f_nu_nr[i] = Omega_nu_nr[i] / (Omega_cb + Omega_nu_0) / tab->avec[i];
+        tab->f_nu_tot[i] = Omega_nu_tot[i] / (Omega_cb + Omega_nu_0) / tab->avec[i];
+        tab->f_g[i] = (Omega_CMB + Omega_ur) / (Omega_cb + Omega_nu_0) / tab->avec[i];
+    }
+
     /* Now, create a table with the Hubble rate */
     for (int i=0; i<size; i++) {
-        double Omega_nu_a = strooklat_interp(&spline, Omega_nu_tot, tab->avec[i]);
-        E2a[i] = E2(tab->avec[i], Omega_CMB, Omega_ur, Omega_nu_a, Omega_c,
+        /* Neglect all radiation and treat neutrinos non-relativistically */
+        E2a[i] = E2(tab->avec[i], 0., 0., 0., Omega_c + Omega_nu_0,
                        Omega_b, Omega_lambda, Omega_k, w0, wa);
         tab->Hvec[i] = sqrt(E2a[i]) * H_0;
     }
@@ -252,30 +257,14 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
         }
     }
 
-    /* If neutrino particle masses are not varied in the N-body simulation to
-     * account for the relativistic energy density, we need to replace the
-     * previous calculation of Omega_nu(a) with Omega_nu_0. However, this
-     * must be done after calculating the Hubble rate, where we do take
-     * the relativistic contribution into account. */
-    if (m->sim_neutrino_nonrel_masses) {
-        for (int i=0; i<size; i++) {
-            Omega_m[i] = Omega_cb + Omega_nu_0;
-            Omega_nu_tot[i] = Omega_nu_0;
-            Omega_nu_nr[i] = Omega_nu_0;
-            tab->f_nu_nr[i] = Omega_nu_0 / (Omega_cb + Omega_nu_0);
-        }
-    }
-
     /* Now, create the A and B functions */
     tab->Avec = malloc(size * sizeof(double));
     tab->Bvec = malloc(size * sizeof(double));
-
     for (int i=0; i<size; i++) {
         double a = tab->avec[i];
         tab->Avec[i] = -(2.0 + dHdloga[i] / tab->Hvec[i]);
-        tab->Bvec[i] = -1.5 * Omega_m[i] / (a * a * a) / E2a[i];
+        tab->Bvec[i] = -1.5 * (Omega_cb + Omega_nu_0) / (a * a * a) / E2a[i];
     }
-
 
     free(Omega_nu_nr);
     free(Omega_r);
@@ -285,7 +274,6 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
     free(w_nu);
     free(dHdloga);
     free(E2a);
-
 
     /* Free the interpolation tables */
     free(y);
@@ -317,4 +305,6 @@ void free_cosmology_tables(struct cosmology_tables *tab) {
     free(tab->Bvec);
     free(tab->Hvec);
     free(tab->f_nu_nr);
+    free(tab->f_nu_tot);
+    free(tab->f_g);
 }
