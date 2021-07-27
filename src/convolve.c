@@ -29,14 +29,13 @@
 #include "../include/strooklat.h"
 
 void convolve(int N, double boxlen, const double *phi, double *out,
-              struct growth_factors_2 *gfac2) {
+              struct growth_factors_2 *gfac2, double k_cutoff,
+              double D2_asymp) {
 
     /* Allocate grids for the Fourier transforms */
     fftw_complex *fphi = malloc(N * N * (N/2+1) * sizeof(fftw_complex));
     fftw_complex *fout = malloc(N * N * (N/2+1) * sizeof(fftw_complex));
     bzero(fout, N * N * (N/2+1) * sizeof(fftw_complex));
-
-    boxlen = 300.;
 
     /* Allocate a real grid to store a copy of the input */
     double *phi_copy = malloc(N * N * N * sizeof(double));
@@ -58,49 +57,92 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     const double dk_twopi = dk / (2.0 * M_PI);
     const double dk_twopi_3 = dk_twopi * dk_twopi * dk_twopi;
 
-    /* Allocate memory for tables of growth factors */
-    int nk = gfac2->nk;
-    double *D2_A_arr = malloc(nk * nk * sizeof(double));
-    double *D2_B_arr = malloc(nk * nk * sizeof(double));
-
-    /* Determine the asymptotic second order growth factor */
-    const double k_cutoff = 0.25;
-    double D2_A_asymp_sum = 0;
-    double D2_B_asymp_sum = 0;
-    int asymp_count = 0;
-
-    for (int i=0; i<nk; i++) {
-        for (int j1=0; j1<nk; j1++) {
-            for (int j2=0; j2<nk; j2++) {
-                double k = gfac2->k[i];
-                double k1 = gfac2->k[j1];
-                double k2 = gfac2->k[j2];
-                if (k1 > k_cutoff && k2 > k_cutoff && k > k_cutoff) {
-                    D2_A_asymp_sum += gfac2->D2_A[i * nk * nk + j1 * nk + j2];
-                    D2_B_asymp_sum += gfac2->D2_B[i * nk * nk + j1 * nk + j2];
-                    asymp_count++;
-                }
-            }
-        }
-    }
-
-    double D2_A_asymp = D2_A_asymp_sum / asymp_count;
-    double D2_B_asymp = D2_B_asymp_sum / asymp_count;
-    double D2_asymp = 0.5 * (D2_A_asymp + D2_B_asymp);
-
-    printf("\n\n");
-    printf("Asymptotic D2_A = %g\n", D2_A_asymp);
-    printf("Asymptotic D2_B = %g\n", D2_B_asymp);
-    printf("Difference = %g\n", D2_B_asymp - D2_A_asymp);
-
     /* Create three wavenumber splines */
     struct strooklat spline_k = {gfac2->k, gfac2->nk};
     struct strooklat spline_k1 = {gfac2->k, gfac2->nk};
     struct strooklat spline_k2 = {gfac2->k, gfac2->nk};
-    init_strooklat_spline(&spline_k, 100);
-    init_strooklat_spline(&spline_k1, 100);
-    init_strooklat_spline(&spline_k2, 100);
+    init_strooklat_spline(&spline_k, 1000);
+    init_strooklat_spline(&spline_k1, 1000);
+    init_strooklat_spline(&spline_k2, 1000);
 
+    /* Cut-off scale */
+    const double k_cutoff2 = k_cutoff * k_cutoff;
+
+    /* Determine how many cells in the inner loop are below the cut-off */
+    long long relevant_cells = 0;
+    for (int x1=0; x1<N; x1++) {
+        for (int y1=0; y1<N; y1++) {
+            for (int z1=0; z1<N; z1++) {
+                double k1x = (x1 > N/2) ? (x1 - N) * dk : x1 * dk;
+                double k1y = (y1 > N/2) ? (y1 - N) * dk : y1 * dk;
+                double k1z = (z1 > N/2) ? (z1 - N) * dk : z1 * dk;
+                double k1k1 = (k1x * k1x) + (k1y * k1y) + (k1z * k1z);
+
+                /* Skip the DC mode */
+                if (k1k1 == 0.) continue;
+
+                relevant_cells += (k1k1 < k_cutoff2);
+            }
+        }
+    }
+
+    printf("There are %lld relevant cells in the inner loop.\n", relevant_cells);
+
+    /* Allocate memory for pre-computed inner loop quantities */
+    double *u_k1_vec = malloc(relevant_cells * sizeof(double));
+    int *ind_k1_vec = malloc(relevant_cells * sizeof(int));
+    fftw_complex *phi_k1 = malloc(relevant_cells * sizeof(fftw_complex));
+    int *x1_vec = malloc(relevant_cells * sizeof(int));
+    int *y1_vec = malloc(relevant_cells * sizeof(int));
+    int *z1_vec = malloc(relevant_cells * sizeof(int));
+
+    /* Pre-compute the inner loop quantities */
+    int count = 0;
+    for (int x1=0; x1<N; x1++) {
+        for (int y1=0; y1<N; y1++) {
+            for (int z1=0; z1<N; z1++) {
+                /* Calculate the first wavevector */
+                double k1x = (x1 > N/2) ? (x1 - N) * dk : x1 * dk;
+                double k1y = (y1 > N/2) ? (y1 - N) * dk : y1 * dk;
+                double k1z = (z1 > N/2) ? (z1 - N) * dk : z1 * dk;
+                double k1k1 = (k1x * k1x) + (k1y * k1y) + (k1z * k1z);
+
+                /* Skip irrelevant cells */
+                if (k1k1 >= k_cutoff2) continue;
+
+                /* Skip the DC mode */
+                if (k1k1 == 0.) continue;
+
+                /* Store the cell index */
+                x1_vec[count] = x1;
+                y1_vec[count] = y1;
+                z1_vec[count] = z1;
+
+                /* Compute the magnitude of the wavevector */
+                double k1 = sqrt(k1k1);
+
+                /* Determine the cooresponding spline index */
+                int ind_k1;
+                double u_k1;
+                strooklat_find_x(&spline_k1, k1, &ind_k1, &u_k1);
+
+                /* Store the wavenumber and spline index */
+                u_k1_vec[count] = u_k1;
+                ind_k1_vec[count] = ind_k1;
+
+                /* Fetch and store the grid value */
+                if (z1 <= N/2) {
+                    phi_k1[count] = fphi[row_major_half(x1, y1, z1, N)];
+                } else {
+                    phi_k1[count] = conj(fphi[row_major_half(N - x1, N - y1, N - z1, N)]);
+                }
+
+                count++;
+            }
+        }
+    }
+
+    printf("Done with pre-computation of the inner loop.\n");
 
     /* Do the convolution */
     #pragma omp parallel for
@@ -111,84 +153,101 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                 double kx,ky,kz,k;
                 fft_wavevector(x, y, z, N, dk, &kx, &ky, &kz, &k);
 
+                if (k == 0.) continue; //skip the DC mode
+
                 /* The id of the output cell */
                 const int id = row_major_half(x,y,z,N);
 
-                if (k == 0.) continue; //skip the DC mode
-                // if (k > 0.25) continue; //low-pass filter
-
-                /* Interpolate along the |k| = |k1 + k2| direction */
-                int index;
-                double u;
-                strooklat_find_x(&spline_k, k, &index, &u);
-                for (int i = 0; i < nk * nk; i++) {
-                    D2_A_arr[i] = (1 - u) * gfac2->D2_A[index * nk * nk + i]
-                                      + u * gfac2->D2_A[(index + 1) * nk * nk + i];
-                    D2_B_arr[i] = (1 - u) * gfac2->D2_B[index * nk * nk + i]
-                                      + u * gfac2->D2_B[(index + 1) * nk * nk + i];
-                }
+                int ind[3];
+                double u[3];
+                strooklat_find_x(&spline_k, k, &ind[0], &u[0]);
+                
+                fftw_complex local_sum = 0;
 
                 /* Perform the integral */
-                for (int x1=0; x1<N; x1++) {
-                    for (int y1=0; y1<N; y1++) {
-                        for (int z1=0; z1<N; z1++) {
-                            /* Calculate the first wavevector */
-                            double k1x = (x1 > N/2) ? (x1 - N) * dk : x1 * dk;
-                            double k1y = (y1 > N/2) ? (y1 - N) * dk : y1 * dk;
-                            double k1z = (z1 > N/2) ? (z1 - N) * dk : z1 * dk;
-                            double k1k1 = (k1x * k1x) + (k1y * k1y) + (k1z * k1z);
+                for (int local_count = 0; local_count < relevant_cells; local_count++) {
+                    /* Fetch the indices of the first wavevector */
+                    int x1 = x1_vec[local_count];
+                    int y1 = y1_vec[local_count];
+                    int z1 = z1_vec[local_count];
 
-                            if (k1k1 > 0.25 * 0.25) continue;
+                    /* The first and second wavevectors sum up to k */
+                    int x2 = wrap(x - x1, N);
+                    int y2 = wrap(y - y1, N);
+                    int z2 = wrap(z - z1, N);
 
-                            /* The first and second wavevectors sum up to k */
-                            int x2 = wrap(x - x1, N);
-                            int y2 = wrap(y - y1, N);
-                            int z2 = wrap(z - z1, N);
+                    /* Compute the second wave vector */
+                    double k2x = (x2 > N/2) ? (x2 - N) * dk : x2 * dk;
+                    double k2y = (y2 > N/2) ? (y2 - N) * dk : y2 * dk;
+                    double k2z = (z2 > N/2) ? (z2 - N) * dk : z2 * dk;
+                    double k2k2 = (k2x * k2x) + (k2y * k2y) + (k2z * k2z);
 
-                            /* Compute the second wave vector */
-                            double k2x = (x2 > N/2) ? (x2 - N) * dk : x2 * dk;
-                            double k2y = (y2 > N/2) ? (y2 - N) * dk : y2 * dk;
-                            double k2z = (z2 > N/2) ? (z2 - N) * dk : z2 * dk;
-                            double k2k2 = (k2x * k2x) + (k2y * k2y) + (k2z * k2z);
+                    /* Skip the DC mode */
+                    if (k2k2 == 0.) continue;
+                    
+                    /* Skip irrelevant cells */
+                    // if (k2k2 >= k_cutoff2) continue;
+                    
+                    /* The first wavevector */
+                    double k1x = (x1 > N/2) ? (x1 - N) * dk : x1 * dk;
+                    double k1y = (y1 > N/2) ? (y1 - N) * dk : y1 * dk;
+                    double k1z = (z1 > N/2) ? (z1 - N) * dk : z1 * dk;
+                    double k1k1 = (k1x * k1x) + (k1y * k1y) + (k1z * k1z);
 
-                            /* Calculate the inner product */
-                            double k1k2 = (k1x * k2x) + (k1y * k2y) + (k1z * k2z);
+                    /* Fetch the corresponding spline index and offset */
+                    ind[1] = ind_k1_vec[local_count];
+                    u[1] = u_k1_vec[local_count];
 
-                            /* Determine the growth factors */
-                            double k1 = sqrt(k1k1);
-                            double k2 = sqrt(k2k2);
-                            double D2_A = strooklat_interp_2d(&spline_k1, &spline_k2, D2_A_arr, k1, k2) - D2_asymp;
-                            double D2_B = strooklat_interp_2d(&spline_k1, &spline_k2, D2_B_arr, k1, k2) - D2_asymp;
+                    /* Calculate the inner product */
+                    double k1k2 = (k1x * k2x) + (k1y * k2y) + (k1z * k2z);
 
-                            /* Compute the kernel */
-                            fftw_complex K = 0.5 * (D2_A * k1k1 * k2k2 - D2_B * k1k2 * k1k2) / (k * k);
+                    /* Determine the magnitude of the second wave vectors */
+                    double k2 = sqrt(k2k2);
+                    strooklat_find_x(&spline_k2, k2, &ind[2], &u[2]);
 
-                            /* Fetch the value of phi(k1) */
-                            fftw_complex ph1;
-                            if (z1 <= N/2) {
-                                ph1 = fphi[row_major_half(x1, y1, z1, N)];
-                            } else {
-                                ph1 = conj(fphi[row_major_half(N - x1, N - y1, N - z1, N)]);
-                            }
+                    /* Interpolate the growth factors */
+                    double D2_A = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_A, ind, u) - D2_asymp;
+                    double D2_B = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_B, ind, u) - D2_asymp;
+                    double D2_C1 = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_C1, ind, u);
+                    double D2_C2 = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_C2, ind, u);
 
-                            /* Fetch the value of phi(k2) */
-                            fftw_complex ph2;
-                            if (z2 <= N/2) {
-                                ph2 = fphi[row_major_half(x2, y2, z2, N)];
-                            } else {
-                                ph2 = conj(fphi[row_major_half(N - x2, N - y2, N - z2, N)]);
-                            }
+                    /* Compute the kernel */
+                    fftw_complex K = 0.5 * (D2_A * k1k1 * k2k2 - D2_B * k1k2 * k1k2) / (k * k);
+                    /* And the frame-lagging terms */
+                    // fftw_complex K_FL = 0.5 * (D2_C1 / k2k2 + D2_C2 / k1k1) * k1k1 * k2k2 * k1k2 / (k * k);
+                    fftw_complex K_FL = 0.5 * (D2_C1 + D2_C2) * k1k1 * k2k2 / (k * k);
 
-                            /* Add the result */
-                            fout[id] += K * (ph1 * ph2) * dk_twopi_3;
-                        }
+                    /* Fetch the value of phi(k1) */
+                    fftw_complex ph1 = phi_k1[local_count];
+
+                    /* Fetch the value of phi(k2) */
+                    fftw_complex ph2;
+                    if (z2 <= N/2) {
+                        ph2 = fphi[row_major_half(x2, y2, z2, N)];
+                    } else {
+                        ph2 = conj(fphi[row_major_half(N - x2, N - y2, N - z2, N)]);
                     }
+
+                    /* Add the result */
+                    local_sum += (K + K_FL) * (ph1 * ph2) * dk_twopi_3;
                 }
+                
+                /* Store the result of the convolution at this k */
+                fout[id] = local_sum;
             }
         }
+        if (x % 10 == 0) printf("%d\n", x);
     }
 
     printf("Done with convolution.\n");
+
+    /* Free the memory of the inner loop pre-computations */
+    free(phi_k1);
+    free(x1_vec);
+    free(y1_vec);
+    free(z1_vec);
+    free(ind_k1_vec);
+    free(u_k1_vec);
 
     /* Apply inverse Fourier transform to obtain the final result */
     fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fout, out, FFTW_ESTIMATE);
@@ -204,10 +263,6 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     free_strooklat_spline(&spline_k);
     free_strooklat_spline(&spline_k1);
     free_strooklat_spline(&spline_k2);
-
-    /* Free the memory used for the growth factor tables */
-    free(D2_A_arr);
-    free(D2_B_arr);
 }
 
 void convolve_fft(int N, double boxlen, const double *phi, double *out) {
@@ -303,10 +358,6 @@ void convolve_fft(int N, double boxlen, const double *phi, double *out) {
 
     /* Apply the inverse Poisson kernel */
     fft_apply_kernel(fphi, fphi, N, boxlen, kernel_inv_poisson, NULL);
-
-    /* Apply a low-pass filter */
-    double k_max = 0.1;
-    fft_apply_kernel(fphi, fphi, N, boxlen, kernel_lowpass, &k_max);
 
     /* Apply inverse Fourier transform to obtain the final result */
     fftw_plan c2r = fftw_plan_dft_c2r_3d(N, N, N, fphi, out, FFTW_ESTIMATE);

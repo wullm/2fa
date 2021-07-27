@@ -23,7 +23,8 @@
 #include "../include/fluid_equations.h"
 
 void convolve(int N, double boxlen, const double *phi, double *out,
-              struct growth_factors_2 *gfac2);
+              struct growth_factors_2 *gfac2, double k_cutoff,
+              double D2_asymp);
 void convolve_fft(int N, double boxlen, const double *phi, double *out);
 
 #endif
