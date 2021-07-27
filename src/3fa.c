@@ -58,10 +58,6 @@ int main(int argc, char *argv[]) {
     readPerturb(&pars, &us, &ptdat);
     readPerturbParams(&pars, &us, &ptpars);
 
-    // /* Our choice of neutrino masses */
-    // double M_nu[1] = {0.067666666};
-    // double deg_nu[1] = {3.0};
-
     /* Specify the cosmological model */
     struct model m;
     m.h = ptpars.h;
@@ -91,6 +87,7 @@ int main(int argc, char *argv[]) {
     m.deg_nu = deg_nu;
     
     printf("\n");
+    printf("Cosmological model:\n");
     printf("h = %g\n", m.h);
     printf("Omega_c = %g\n", m.Omega_c);
     printf("Omega_b = %g\n", m.Omega_b);
@@ -129,6 +126,8 @@ int main(int argc, char *argv[]) {
     int N;
 
     char field_fname[50] = "phi.hdf5";
+
+    printf("\n");
     printf("Reading input field from %s.\n", field_fname);
 
     /* Initialize MPI for distributed memory parallelization */
@@ -141,7 +140,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &MPI_Rank_Count);
 
     readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, field_fname);
-    printf("(N,L,x[0]) = (%d, %g, %g)\n", N, BoxLen, box[0]);
+    printf("(N, L) = (%d, %g)\n", N, BoxLen);
 
     /* Allocate an output grid */
     double *out = malloc(N * N * N * sizeof(double));
@@ -180,7 +179,7 @@ int main(int argc, char *argv[]) {
     double D2_B_asymp = D2_B_asymp_sum / asymp_count;
     double D2_asymp = 0.5 * (D2_A_asymp + D2_B_asymp);
 
-    printf("\n\n");
+    printf("\n");
     printf("Asymptotic D2_A = %.15g\n", D2_A_asymp);
     printf("Asymptotic D2_B = %.15g\n", D2_B_asymp);
     printf("Mean (D2_A + D2_B)/2 = %.15g\n", D2_asymp);
@@ -193,12 +192,12 @@ int main(int argc, char *argv[]) {
     printf("\nIntegrating second order equations took %.5f s\n\n", microsec_inter/1e6);
     
     /* Do the expensive convolution */
-    // convolve_fft(N, BoxLen, box, out);
     convolve(N, BoxLen, box, out, &gfac2, k_cutoff, D2_asymp);
     
     /* Export the partial result */
     char out_fname1[50] = "out_partial.hdf5";
     writeFieldFile(out, N, BoxLen, out_fname1);
+    printf("\n");
     printf("Output written to '%s'.\n", out_fname1);
 
     /* Do the fast convolution with constant kernel using FFTs */

@@ -235,16 +235,21 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     const double B_0 = H_0 * H_0 * Omega_cb;
     const double f_nu_tot_0 = strooklat_interp(&spline_tab, tab->f_nu_tot, 1.);
     
-    /* Start in the EdS limit */
-    double inv_sqrt_g_start = 0.25 * (sqrt(1.0 + 24 * (1.0 - f_nu_tot_0)) - 1.0) / sqrt(1.0 - f_nu_tot_0);
-    double D_dot_start = inv_sqrt_g_start * pow(tab->avec[0], -1.5) * sqrt(B_0);
-    double H_start = tab->Hvec[0];
-    printf("g_start = %.10g\n", 1.0 / pow(inv_sqrt_g_start,2));
-    printf("H_start = %.10g %.10g\n", H_start, tab->Hvec[0]);
-    double y_1[2] = {1.0, -D_dot_start/H_start};
-
     /* Start integrating at the beginning of the cosmological table */
-    double log_a = log(tab->avec[0]);
+    double log_a_start = log(tab->avec[0]);
+    double log_a = log_a_start;
+    double H_start = tab->Hvec[0];
+    
+    /* Compute pre-initial conditions */
+    double a_and_a_half = exp(1.5 * log_a_start);
+    double inv_sqrt_g_start = 0.25 * (sqrt(1.0 + 24 * (1.0 - f_nu_tot_0)) - 1.0) / sqrt(1.0 - f_nu_tot_0);
+    double g_start = 1.0 / (inv_sqrt_g_start * inv_sqrt_g_start);
+    double D_dot_start = inv_sqrt_g_start / a_and_a_half * sqrt(B_0);
+    
+    printf("(g_start, H_start) = (%.10g, %.10g)\n\n", g_start, H_start);
+    
+    /* Start in the asymptotic limit */
+    double y_1[2] = {1.0, -D_dot_start/H_start};
     
     /* Integrate up to the scale factor of each row in the cosmological table */
     for (int i=0; i<tab->size; i++) {
@@ -298,6 +303,9 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
         gfac2->k[i] = k_min * exp(i * (log_k_max - log_k_min) / nk);
     }
 
+    printf("(%%) k k1 k2 : D2_A D2_B D2_C1 D2_C2\n");
+    printf("==============================================================\n");
+
     /* Perform the second-order growth factor calculation */
     /* We loop over values of the arguments D_2(k, k1, k2) */
     for (int i=0; i<nk; i++) { //k-loop
@@ -345,7 +353,6 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 double D_final = strooklat_interp(&spline_tab, D_asymp, a_final);
 
                 /* Compute steady state solution at early times in asymptotic limit */
-                double g_start = strooklat_interp(&spline_tab, g_asymp, tab->avec[0]);
                 double E_theory = (21.0/2.0) * g_start / (6. + (9./2.) * g_start);
                                 
                 /* Prepare the initial conditions */
@@ -384,7 +391,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 gfac2->D2_C1[i * nk * nk + j1 * nk + j2] = y[4] / D2_EdS;
                 gfac2->D2_C2[i * nk * nk + j1 * nk + j2] = y[6] / D2_EdS;
 
-                printf("%g %g (%.3f%%) %g %g %g %g %g %g : %.8g %.8g %.8g %.8g\n", D_final, strooklat_interp(&spline_D, g_asymp, D_final), (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, k1_dot_k2, k1_dot_k2/(k1*k1), k1_dot_k2/(k2*k2), y[0] / D2_EdS, y[2] / D2_EdS, y[4] / D2_EdS, y[6] / D2_EdS);
+                printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, y[0] / D2_EdS, y[2] / D2_EdS, y[4] / D2_EdS, y[6] / D2_EdS);
             }
         }
     }

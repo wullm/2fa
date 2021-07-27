@@ -143,6 +143,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     }
 
     printf("Done with pre-computation of the inner loop.\n");
+    printf("Performing convolution.\n\n");
 
     /* Do the convolution */
     #pragma omp parallel for
@@ -236,9 +237,10 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                 fout[id] = local_sum;
             }
         }
-        if (x % 10 == 0) printf("%d\n", x);
+        if (x % 10 == 0) printf("%d / %d\n", x, N);
     }
 
+    printf("\n");
     printf("Done with convolution.\n");
 
     /* Free the memory of the inner loop pre-computations */
