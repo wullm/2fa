@@ -116,9 +116,9 @@ int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
     ratio_dnu_dcb_k2 *= f_nu_nr / f_nu_tot;
     
     /* Pre-factor for the Poisson source terms */
-    double B_k = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k);
-    double B_k1 = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k1);
-    double B_k2 = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k2);
+    double B_k = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k) * (1.0 - f_nu_tot_0);
+    double B_k1 = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k1) * (1.0 - f_nu_tot_0);
+    double B_k2 = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k2) * (1.0 - f_nu_tot_0);
 
     /* First order growth factor for the cdm+baryon fluid at k1 and k2 */
     double D_cb_k1 = y[8];
@@ -127,7 +127,7 @@ int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
 
     /* ODE for the two second order growth factors at (k,k1,k2) */
     f[0] = -y[1];
-    f[1] = A * y[1] + B_k * y[0] + B_k * D_cb_k1k2 + (B_k - B_k1) * k1_dot_k2 / (k2*k2) * D_cb_k1k2 + (B_k - B_k2) * k1_dot_k2 / (k1*k1) * D_cb_k1k2;
+    f[1] = A * y[1] + B_k * y[0] + B_k * D_cb_k1k2;
     f[2] = -y[3];
     f[3] = A * y[3] + B_k * y[2] + (B_k1 + B_k2 - B_k) * D_cb_k1k2;
 
@@ -139,9 +139,9 @@ int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
 
     /* ODE for the first order growth factor evaluated at k1, k2 */
     f[8] = -y[9];
-    f[9] = A * y[9] + B_k1 * y[10];
+    f[9] = A * y[9] + B_k1 * D_cb_k1;
     f[10] = -y[11];
-    f[11] = A * y[11] + B_k2 * y[10];
+    f[11] = A * y[11] + B_k2 * D_cb_k2;
 
     return GSL_SUCCESS;
 }
@@ -232,8 +232,8 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     /* Compute normalization factor for g */
     const double H_0 = m->h * 100 * KM_METRES / MPC_METRES * us->UnitTimeSeconds;
     const double Omega_cb = m->Omega_c + m->Omega_b;
-    const double B_0 = H_0 * H_0 * Omega_cb;
     const double f_nu_tot_0 = strooklat_interp(&spline_tab, tab->f_nu_tot, 1.);
+    const double B_0 = H_0 * H_0 * Omega_cb / (1.0 - f_nu_tot_0);
     
     /* Start integrating at the beginning of the cosmological table */
     double log_a_start = log(tab->avec[0]);
@@ -386,12 +386,13 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
 
                 gsl_odeiv2_driver_free(d);
 
-                gfac2->D2_A[i * nk * nk + j1 * nk + j2] = y[0] / D2_EdS;
-                gfac2->D2_B[i * nk * nk + j1 * nk + j2] = y[2] / D2_EdS;
-                gfac2->D2_C1[i * nk * nk + j1 * nk + j2] = y[4] / D2_EdS;
-                gfac2->D2_C2[i * nk * nk + j1 * nk + j2] = y[6] / D2_EdS;
+                int id = i * nk * nk + j1 * nk + j2;
+                gfac2->D2_A[id] = y[0] / D2_EdS;
+                gfac2->D2_B[id] = y[2] / D2_EdS;
+                gfac2->D2_C1[id] = y[4] / D2_EdS;
+                gfac2->D2_C2[id] = y[6] / D2_EdS;
 
-                printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, y[0] / D2_EdS, y[2] / D2_EdS, y[4] / D2_EdS, y[6] / D2_EdS);
+                printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, gfac2->D2_A[id], gfac2->D2_B[id], gfac2->D2_C1[id], gfac2->D2_C2[id]);
             }
         }
     }

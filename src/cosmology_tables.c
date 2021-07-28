@@ -266,7 +266,7 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
         double a = tab->avec[i];
         double H = tab->Hvec[i];
         tab->Avec[i] = -(2.0 + dHdloga[i] / H);
-        tab->Bvec[i] = -1.5 * Omega_cb / (a * a * a) * (H_0 * H_0) / (H * H);
+        tab->Bvec[i] = -1.5 * (Omega_cb + Omega_nu_0) / (a * a * a) * (H_0 * H_0) / (H * H);
     }
 
     free(Omega_nu_nr);

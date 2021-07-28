@@ -179,6 +179,25 @@ int main(int argc, char *argv[]) {
     double D2_B_asymp = D2_B_asymp_sum / asymp_count;
     double D2_asymp = 0.5 * (D2_A_asymp + D2_B_asymp);
 
+    /* Set skipped configurations to be on the safe side */
+    for (int i=0; i<nk; i++) {
+        for (int j1=0; j1<nk; j1++) {
+            for (int j2=0; j2<nk; j2++) {
+                double k = gfac2.k[i];
+                double k1 = gfac2.k[j1];
+                double k2 = gfac2.k[j2];
+
+                /* Skip impossible configurations using |k1|^2 + |k2|^2 -
+                 * 2|k1||k2| <= |k1 + k2| |k1|^2 + |k2|^2 + 2|k1||k2|) */
+                if (k*k < 0.8 * (k1*k1 + k2*k2 - 2*k1*k2) ||
+                    k*k > 1.2 * (k1*k1 + k2*k2 + 2*k1*k2)) {
+                    gfac2.D2_A[i * nk * nk + j1 * nk + j2] = D2_asymp;
+                    gfac2.D2_B[i * nk * nk + j1 * nk + j2] = D2_asymp;
+                }
+            }
+        }
+    }
+
     printf("\n");
     printf("Asymptotic D2_A = %.15g\n", D2_A_asymp);
     printf("Asymptotic D2_B = %.15g\n", D2_B_asymp);
@@ -194,6 +213,12 @@ int main(int argc, char *argv[]) {
     /* Do the expensive convolution */
     convolve(N, BoxLen, box, out, &gfac2, k_cutoff, D2_asymp);
     
+    /* Timer */
+    gettimeofday(&time_stop, NULL);
+    long unsigned microsec = (time_stop.tv_sec - time_inter.tv_sec) * 1000000
+                           + time_stop.tv_usec - time_inter.tv_usec;
+    printf("\nThe convolution took %.5f s\n", microsec/1e6);
+
     /* Export the partial result */
     char out_fname1[50] = "out_partial.hdf5";
     writeFieldFile(out, N, BoxLen, out_fname1);
@@ -243,10 +268,4 @@ int main(int argc, char *argv[]) {
     cleanParams(&pars);
     cleanPerturb(&ptdat);
     cleanPerturbParams(&ptpars);
-
-    /* Timer */
-    gettimeofday(&time_stop, NULL);
-    long unsigned microsec = (time_stop.tv_sec - time_inter.tv_sec) * 1000000
-                           + time_stop.tv_usec - time_inter.tv_usec;
-    printf("\nThe convolution took %.5f s\n", microsec/1e6);
 }
