@@ -30,6 +30,8 @@
 
 #include "../include/fluid_equations.h"
 #include "../include/titles.h"
+#include "../include/input.h"
+#include "../include/output.h"
 #include "../include/strooklat.h"
 
 /* Parameters for the differential equation */
@@ -48,19 +50,22 @@ struct ode_params_2 {
 };
 
 /* Differential equation for the first order growth factor
- * @param loga The independent variable: the logarithm of the scale factor
+ * Note that this equation is w.r.t. log(a), whereas the other equations are
+ * w.r.t. the first order growth factor D, computed here.
+ *
+ * @param log_a The independent variable: the logarithm of the scale factor
  * @param y The dependent variable: the growth factors and time derivatives
  * @param f The right-hand side of the equation (output)
  * @param params Parameters for the differential equation
 */
-int ode_1st_order(double loga, const double y[2], double f[2], void *params) {
+int ode_1st_order(double log_a, const double y[2], double f[2], void *params) {
     /* Unpack ode parameters */
     struct ode_params_2 *p = (struct ode_params_2 *) params;
     struct strooklat *spline = p->spline;
     struct cosmology_tables *tab = p->tab;
 
     /* Scale factor and wavenumbers */
-    double a = exp(loga);
+    double a = exp(log_a);
     /* Cosmological functions of time only */
     double A = strooklat_interp(spline, tab->Avec, a);
     double B = strooklat_interp(spline, tab->Bvec, a);
@@ -68,6 +73,90 @@ int ode_1st_order(double loga, const double y[2], double f[2], void *params) {
     /* Differential equation for the asymptotic first order growth factor */
     f[0] = -y[1];
     f[1] = A * y[1] + B * y[0];
+
+    return GSL_SUCCESS;
+}
+
+/* Compute pre-factors for the 1st and 2nd order differential equations w.r.t.
+ * the first order growth factor D, at wavenumbers k, k1, k2
+ *
+ * @param D The independent variable: the asymptotic first order growth factor
+ * @param p Parameters for the differential equation (contains k, k1, k2)
+ * @param A_ref (output) The Hubble drag pre-factor A
+ * @param B_k_ref (output) The Poisson pre-factor B at wavenumber k
+ * @param B_k1_ref (output) The Poisson pre-factor B at wavenumber k1
+ * @param B_k2_ref (output) The Poisson pre-factor B at wavenumber k2
+*/
+void compute_A_B_factors(double D, struct ode_params_2 *p, double *A_ref,
+                         double *B_k_ref, double *B_k1_ref, double *B_k2_ref) {
+
+    /* Unpack the parameters */
+    struct strooklat *spline_D = p->spline_D;
+    struct cosmology_tables *tab = p->tab;
+    struct strooklat *spline_a = p->pt_spline_a;
+    struct strooklat *spline_k = p->pt_spline_k;
+
+    /* The cosmological scale factor at this growth factor a(D) */
+    double a = strooklat_interp(spline_D, tab->avec, D);
+
+    /* Magnitude of wavevectors k1, k2, and k = k1 + k2 */
+    double k1 = p->k1;
+    double k2 = p->k2;
+    double k = p->k; // | k | = | k1 + k2 | != | k1 | + | k2 |
+
+    /* Cosmological functions of time only */
+    double f_nu_nr = strooklat_interp(spline_D, tab->f_nu_nr, D);
+    double f_nu_tot = strooklat_interp(spline_D, tab->f_nu_tot, D);
+    double f_nu_tot_0 = strooklat_interp(spline_D, tab->f_nu_tot, 1.0);
+    double f_nu_over_f_cb = f_nu_tot_0 / (1.0 - f_nu_tot_0);
+    double g_asymp = strooklat_interp(spline_D, p->g_asymp, D);
+
+    /* Ratio of neutrino density to cdm+baryon density at k, k1, k2 */
+    double ratio_dnu_dcb_k = strooklat_interp_2d(spline_a, spline_k, p->ratio_dnu_dcb, a, k);
+    double ratio_dnu_dcb_k1 = strooklat_interp_2d(spline_a, spline_k, p->ratio_dnu_dcb, a, k1);
+    double ratio_dnu_dcb_k2 = strooklat_interp_2d(spline_a, spline_k, p->ratio_dnu_dcb, a, k2);
+
+    /* Zero out the radiation part */
+    ratio_dnu_dcb_k *= f_nu_nr / f_nu_tot;
+    ratio_dnu_dcb_k1 *= f_nu_nr / f_nu_tot;
+    ratio_dnu_dcb_k2 *= f_nu_nr / f_nu_tot;
+
+    /* Cosmological functions rewritten using D as time variable */
+    double A = -1.5 * g_asymp / D;
+    double B = -1.5 * g_asymp / (D * D);
+
+    /* Pre-factor for the Hubble drift term */
+    *A_ref = A;
+
+    /* Pre-factor for the Poisson source terms */
+    *B_k_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k) * (1.0 - f_nu_tot_0);
+    *B_k1_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k1) * (1.0 - f_nu_tot_0);
+    *B_k2_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k2) * (1.0 - f_nu_tot_0);
+}
+
+/* Differential equation for scale-depndent first order growth factors at k1,k2
+ * @param D The independent variable: the asymptotic first order growth factor
+ * @param y The dependent variable: the growth factors and time derivatives
+ * @param f The right-hand side of the equation (output)
+ * @param params Parameters for the differential equation
+*/
+int ode_1st_order_k1_k2(double D, const double y[4], double f[4], void *params) {
+    /* Unpack ode parameters */
+    struct ode_params_2 *p = (struct ode_params_2 *) params;
+
+    /* Compute cosmological pre-factors */
+    double A, B_k, B_k1, B_k2;
+    compute_A_B_factors(D, p, &A, &B_k, &B_k1, &B_k2);
+
+    /* First order growth factor for the cdm+baryon fluid at k1 and k2 */
+    double D_cb_k1 = y[0];
+    double D_cb_k2 = y[2];
+
+    /* ODE for the first order growth factor evaluated at k1, k2 */
+    f[0] = -y[1];
+    f[1] = A * y[1] + B_k1 * D_cb_k1;
+    f[2] = -y[3];
+    f[3] = A * y[3] + B_k2 * D_cb_k2;
 
     return GSL_SUCCESS;
 }
@@ -81,13 +170,10 @@ int ode_1st_order(double loga, const double y[2], double f[2], void *params) {
 int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
     /* Unpack ode parameters */
     struct ode_params_2 *p = (struct ode_params_2 *) params;
-    struct strooklat *spline_D = p->spline_D;
-    struct cosmology_tables *tab = p->tab;
-    struct strooklat *spline_a = p->pt_spline_a;
-    struct strooklat *spline_k = p->pt_spline_k;
 
-    /* The cosmological scale factor at this growth factor a(D) */
-    double a = strooklat_interp(spline_D, tab->avec, D);
+    /* Compute cosmological pre-factors */
+    double A, B_k, B_k1, B_k2;
+    compute_A_B_factors(D, p, &A, &B_k, &B_k1, &B_k2);
 
     /* Magnitude of wavevectors k1, k2, and k = k1 + k2 */
     double k1 = p->k1;
@@ -95,53 +181,28 @@ int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
     double k = p->k; // | k | = | k1 + k2 |
     double k1_dot_k2 = 0.5 * (k*k - k1*k1 - k2*k2); // dot product
 
-    /* Cosmological functions of time only */
-    double f_nu_nr = strooklat_interp(spline_D, tab->f_nu_nr, D);
-    double f_nu_tot = strooklat_interp(spline_D, tab->f_nu_tot, D);
-    double f_nu_tot_0 = strooklat_interp(spline_D, tab->f_nu_tot, 1.0);   
-    double f_nu_over_f_cb = f_nu_tot_0 / (1.0 - f_nu_tot_0); 
-    double g_asymp = strooklat_interp(spline_D, p->g_asymp, D);
-    /* Cosmological functions rewritten using D as time variable */
-    double A = -1.5 * g_asymp / D;
-    double B = -1.5 * g_asymp / (D * D);
-
-    /* Ratio of neutrino density to cdm+baryon density at k, k1, k2 */
-    double ratio_dnu_dcb_k = strooklat_interp_2d(spline_a, spline_k, p->ratio_dnu_dcb, a, k);
-    double ratio_dnu_dcb_k1 = strooklat_interp_2d(spline_a, spline_k, p->ratio_dnu_dcb, a, k1);
-    double ratio_dnu_dcb_k2 = strooklat_interp_2d(spline_a, spline_k, p->ratio_dnu_dcb, a, k2);
-    
-    /* Zero out the radiation part */
-    ratio_dnu_dcb_k *= f_nu_nr / f_nu_tot;
-    ratio_dnu_dcb_k1 *= f_nu_nr / f_nu_tot;
-    ratio_dnu_dcb_k2 *= f_nu_nr / f_nu_tot;
-    
-    /* Pre-factor for the Poisson source terms */
-    double B_k = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k) * (1.0 - f_nu_tot_0);
-    double B_k1 = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k1) * (1.0 - f_nu_tot_0);
-    double B_k2 = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k2) * (1.0 - f_nu_tot_0);
-
     /* First order growth factor for the cdm+baryon fluid at k1 and k2 */
-    double D_cb_k1 = y[8];
-    double D_cb_k2 = y[10];
+    double D_cb_k1 = y[0];
+    double D_cb_k2 = y[2];
     double D_cb_k1k2 = D_cb_k1 * D_cb_k2;
 
-    /* ODE for the two second order growth factors at (k,k1,k2) */
+    /* ODE for the first order growth factor evaluated at k1, k2 */
     f[0] = -y[1];
-    f[1] = A * y[1] + B_k * y[0] + B_k * D_cb_k1k2;
+    f[1] = A * y[1] + B_k1 * D_cb_k1;
     f[2] = -y[3];
-    f[3] = A * y[3] + B_k * y[2] + (B_k1 + B_k2 - B_k) * D_cb_k1k2;
+    f[3] = A * y[3] + B_k2 * D_cb_k2;
+
+    /* ODE for the two second order growth factors at (k,k1,k2) */
+    f[4] = -y[5];
+    f[5] = A * y[5] + B_k * y[4] + B_k * D_cb_k1k2;
+    f[6] = -y[7];
+    f[7] = A * y[7] + B_k * y[6] + (B_k1 + B_k2 - B_k) * D_cb_k1k2;
 
     /* ODE for the frame-lagging terms at (k,k1,k2) */
-    f[4] = -y[5];
-    f[5] = A * y[5] + B_k * y[4] + (B_k - B_k1) * k1_dot_k2 / (k2*k2) * D_cb_k1k2;
-    f[6] = -y[7];
-    f[7] = A * y[7] + B_k * y[6] + (B_k - B_k2) * k1_dot_k2 / (k1*k1) * D_cb_k1k2;
-
-    /* ODE for the first order growth factor evaluated at k1, k2 */
     f[8] = -y[9];
-    f[9] = A * y[9] + B_k1 * D_cb_k1;
+    f[9] = A * y[9] + B_k * y[8] + (B_k - B_k1) * k1_dot_k2 / (k2*k2) * D_cb_k1k2;
     f[10] = -y[11];
-    f[11] = A * y[11] + B_k2 * D_cb_k2;
+    f[11] = A * y[11] + B_k * y[10] + (B_k - B_k2) * k1_dot_k2 / (k1*k1) * D_cb_k1k2;
 
     return GSL_SUCCESS;
 }
@@ -234,23 +295,23 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     const double Omega_cb = m->Omega_c + m->Omega_b;
     const double f_nu_tot_0 = strooklat_interp(&spline_tab, tab->f_nu_tot, 1.);
     const double B_0 = H_0 * H_0 * Omega_cb / (1.0 - f_nu_tot_0);
-    
+
     /* Start integrating at the beginning of the cosmological table */
     double log_a_start = log(tab->avec[0]);
     double log_a = log_a_start;
     double H_start = tab->Hvec[0];
-    
+
     /* Compute pre-initial conditions */
     double a_and_a_half = exp(1.5 * log_a_start);
     double inv_sqrt_g_start = 0.25 * (sqrt(1.0 + 24 * (1.0 - f_nu_tot_0)) - 1.0) / sqrt(1.0 - f_nu_tot_0);
     double g_start = 1.0 / (inv_sqrt_g_start * inv_sqrt_g_start);
     double D_dot_start = inv_sqrt_g_start / a_and_a_half * sqrt(B_0);
-    
+
     printf("(g_start, H_start) = (%.10g, %.10g)\n\n", g_start, H_start);
-    
+
     /* Start in the asymptotic limit */
     double y_1[2] = {1.0, -D_dot_start/H_start};
-    
+
     /* Integrate up to the scale factor of each row in the cosmological table */
     for (int i=0; i<tab->size; i++) {
         double loga_final = log(tab->avec[i]);
@@ -315,8 +376,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 /* Magnitude of wavevectors k1, k2, and k = k1 + k2 */
                 double k1 = gfac2->k[j1];
                 double k2 = gfac2->k[j2];
-                double k = gfac2->k[i]; // | k | = | k1 + k2 |
-                double k1_dot_k2 = 0.5 * (k*k - k1*k1 - k2*k2); // dot product
+                double k = gfac2->k[i]; // | k | = | k1 + k2 | != | k1 | + | k2 |
 
                 /* Skip extreme angles that are not needed */
                 // double ak1 = k1_dot_k2 / (k1*k1);
@@ -352,20 +412,37 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 double D_start = D_asymp[0];
                 double D_final = strooklat_interp(&spline_tab, D_asymp, a_final);
 
+                /* Prepare the scale-dependent first order growth factors */
+                double y_1_k1_k2[4] = {1., -1., 1., -1.};
+
+                /* Integrate the scale-dependent 1st order factors up to a = 1 */
+                double tol_1_k1_k2 = 1e-6;
+                double hstart_1_k1_k2 = 1e-6;
+                gsl_odeiv2_system sys_1_k1_k2 = {ode_1st_order_k1_k2, NULL, 4, &odep};
+                gsl_odeiv2_driver *d_1_k1_k2 = gsl_odeiv2_driver_alloc_y_new(&sys_1_k1_k2, gsl_odeiv2_step_rk8pd, hstart_1_k1_k2, tol_1_k1_k2, tol_1_k1_k2);
+                double D_1_k1_k2 = D_start;
+                gsl_odeiv2_driver_apply(d_1_k1_k2, &D_1_k1_k2, 1.0, y_1_k1_k2);
+                gsl_odeiv2_driver_free(d_1_k1_k2);
+
+                /* Normalize the growth factors s.t. D(k) = 1 at a = 1 */
+                double D_k1_start = 1. / y_1_k1_k2[0];
+                double D_k2_start = 1. / y_1_k1_k2[2];
+                double D_mean_start = sqrt(D_k1_start * D_k2_start);
+
                 /* Compute steady state solution at early times in asymptotic limit */
                 double E_theory = (21.0/2.0) * g_start / (6. + (9./2.) * g_start);
-                                
                 /* Prepare the initial conditions */
-                double D2_EdS = 3./7. * E_theory * D_start * D_start;
-                double D2_EdS_dot = -(6./7.) * E_theory * D_start;
-                double y[12] = {D2_EdS, D2_EdS_dot, D2_EdS, D2_EdS_dot, 0, 0, 0, 0, D_start, -1, D_start, -1};
+                double D2_EdS = 3./7. * E_theory * D_mean_start * D_mean_start;
+                double D2_EdS_dot = -(6./7.) * E_theory * D_mean_start;
+                double y[12] = {D_k1_start, -D_k1_start, D_k2_start, -D_k2_start, D2_EdS, D2_EdS_dot, D2_EdS, D2_EdS_dot, 0, 0, 0, 0};
 
+                /* The independent variable is the scale-independent growth factor D */
                 double D = D_start;
                 double D_next = D_start;
 
-                /* Integrate */
-                double tol = 1e-12;
-                double hstart = 1e-12;
+                /* Integrate the second order growth factors */
+                double tol = 1e-6;
+                double hstart = 1e-6;
                 gsl_odeiv2_system sys = {ode_2nd_order, NULL, 12, &odep};
                 gsl_odeiv2_driver *d = gsl_odeiv2_driver_alloc_y_new(&sys, gsl_odeiv2_step_rk8pd, hstart, tol, tol);
 
@@ -377,7 +454,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                     D_next = fmin(D_next, D_final);
 
                     gsl_odeiv2_driver_apply(d, &D, D_next, y);
-                    D2_EdS = (3. / 7.) * y[8] * y[10];
+                    D2_EdS = (3. / 7.) * y[0] * y[2];
 
                     // printf("%g %g %g %g %.8g %.8g %.8g %.8g %.8g\n", k, k1, k2, D_next, y[0] / D2_EdS, y[2] / D2_EdS, y[4] / D2_EdS, y[6] / D2_EdS, strooklat_interp(&spline_D, g_asymp, D_next));
                 }
@@ -387,15 +464,30 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 gsl_odeiv2_driver_free(d);
 
                 int id = i * nk * nk + j1 * nk + j2;
-                gfac2->D2_A[id] = y[0] / D2_EdS;
-                gfac2->D2_B[id] = y[2] / D2_EdS;
-                gfac2->D2_C1[id] = y[4] / D2_EdS;
-                gfac2->D2_C2[id] = y[6] / D2_EdS;
+                gfac2->D2_A[id] = y[4] / D2_EdS;
+                gfac2->D2_B[id] = y[6] / D2_EdS;
+                gfac2->D2_C1[id] = y[8] / D2_EdS;
+                gfac2->D2_C2[id] = y[10] / D2_EdS;
 
+                // printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, y[8] / D_final, y[10] / D_final, D_final, gfac2->D2_C2[id]);
                 printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, gfac2->D2_A[id], gfac2->D2_B[id], gfac2->D2_C1[id], gfac2->D2_C2[id]);
             }
         }
     }
+
+    /* Export the tables as 3D grids */
+    char out_fname_A[50] = "table_A.hdf5";
+    char out_fname_B[50] = "table_B.hdf5";
+    char out_fname_C1[50] = "table_C1.hdf5";
+    char out_fname_C2[50] = "table_C2.hdf5";
+    writeFieldFile(gfac2->D2_A, nk, 1.0, out_fname_A);
+    printf("Table A written to '%s'.\n", out_fname_A);
+    writeFieldFile(gfac2->D2_B, nk, 1.0, out_fname_B);
+    printf("Table B written to '%s'.\n", out_fname_B);
+    writeFieldFile(gfac2->D2_C1, nk, 1.0, out_fname_C1);
+    printf("Table C1 written to '%s'.\n", out_fname_C1);
+    writeFieldFile(gfac2->D2_C2, nk, 1.0, out_fname_C2);
+    printf("Table C2 written to '%s'.\n", out_fname_C2);
 
     /* Free the perturbation splines */
     free_strooklat_spline(&spline_a);
@@ -405,6 +497,47 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     free(ratio_dnu_dcb);
     free(ratio_dg_dcb);
     free(D_cb);
+}
+
+void import_growth_factors_2(struct growth_factors_2 *gfac2,
+                             int nk, double k_min, double k_max,
+                             MPI_Comm comm) {
+
+    /* Minimum and maximum wavenumbers for the second order kernel */
+    double log_k_min = log(k_min);
+    double log_k_max = log(k_max);
+
+    /* Allocate memory for the second order kernel table in (k,k1,k2)-space */
+    gfac2->nk = nk;
+    gfac2->k = malloc(nk * sizeof(double));
+
+    /* Initialize the wavenumbers at which to compute the second order kernel */
+    for (int i=0; i<nk; i++) {
+        gfac2->k[i] = k_min * exp(i * (log_k_max - log_k_min) / nk);
+    }
+
+    /* Unused BoxLength attribute */
+    double BoxLen;
+    /* Read table size */
+    int nk_read;
+
+    /* Import the tables as 3D grids */
+    char out_fname_A[50] = "table_A.hdf5";
+    char out_fname_B[50] = "table_B.hdf5";
+    char out_fname_C1[50] = "table_C1.hdf5";
+    char out_fname_C2[50] = "table_C2.hdf5";
+    readFieldFile_MPI(&gfac2->D2_A, &nk_read, &BoxLen, comm, out_fname_A);
+    assert(nk_read == nk);
+    printf("Table A read from '%s'.\n", out_fname_A);
+    readFieldFile_MPI(&gfac2->D2_B, &nk_read, &BoxLen, comm, out_fname_B);
+    assert(nk_read == nk);
+    printf("Table B read from '%s'.\n", out_fname_B);
+    readFieldFile_MPI(&gfac2->D2_C1, &nk_read, &BoxLen, comm, out_fname_C1);
+    assert(nk_read == nk);
+    printf("Table C1 read from '%s'.\n", out_fname_C1);
+    readFieldFile_MPI(&gfac2->D2_C2, &nk_read, &BoxLen, comm, out_fname_C2);
+    assert(nk_read == nk);
+    printf("Table C2 read from '%s'.\n", out_fname_C2);
 }
 
 void free_growth_factors_2(struct growth_factors_2 *gfac2) {

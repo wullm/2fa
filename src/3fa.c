@@ -40,15 +40,15 @@ int main(int argc, char *argv[]) {
     const char *fname = argv[1];
     printf("3FA initial conditions.\n");
 
-    /* Timer */
-    struct timeval time_stop, time_inter, time_start;
-    gettimeofday(&time_start, NULL);
-
     /* 3FA structures */
     struct params pars;
     struct units us;
     struct perturb_data ptdat;
     struct perturb_params ptpars;
+
+    /* Initialize MPI for distributed memory parallelization */
+    MPI_Init(&argc, &argv);
+    fftw_mpi_init();
 
     /* Read parameter file for parameters, units */
     readParams(&pars, fname);
@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) {
     m.T_nu_0 = T_nu_sum / m.N_nu;
     m.M_nu = M_nu;
     m.deg_nu = deg_nu;
-    
+
     printf("\n");
     printf("Cosmological model:\n");
     printf("h = %g\n", m.h);
@@ -113,12 +113,23 @@ int main(int argc, char *argv[]) {
     /* Wavenumbers for the 3D table of second-order growth factors (k,k1,k2) */
     const double k_min = 2 * M_PI / 300. * 0.9;
     const double k_max = 2 * M_PI / 300. * 540 * 2;
-    const int nk = 10;
+    const int nk = 50;
+
+    /* Timer */
+    struct timeval time_stop, time_inter, time_start;
+    gettimeofday(&time_start, NULL);
 
     /* Begin and end for the second order growth factor integration */
     struct growth_factors_2 gfac2;
     integrate_fluid_equations_2(&m, &us, &tab, &ptdat, &gfac2, a_end, nk,
                                 k_min, k_max);
+    // import_growth_factors_2(&gfac2, nk, k_min, k_max, MPI_COMM_WORLD);
+
+    /* Timer */
+    gettimeofday(&time_inter, NULL);
+    long unsigned microsec_inter = (time_inter.tv_sec - time_start.tv_sec) * 1000000
+                                 + time_inter.tv_usec - time_start.tv_usec;
+    printf("\nIntegrating second order equations took %.5f s\n\n", microsec_inter/1e6);
 
     /* Read the first order potential field on each MPI rank */
     double *box;
@@ -129,10 +140,6 @@ int main(int argc, char *argv[]) {
 
     printf("\n");
     printf("Reading input field from %s.\n", field_fname);
-
-    /* Initialize MPI for distributed memory parallelization */
-    MPI_Init(&argc, &argv);
-    fftw_mpi_init();
 
     /* Get the dimensions of the cluster */
     int rank, MPI_Rank_Count;
@@ -158,14 +165,14 @@ int main(int argc, char *argv[]) {
                 double k = gfac2.k[i];
                 double k1 = gfac2.k[j1];
                 double k2 = gfac2.k[j2];
-                
+
                 /* Skip impossible configurations using |k1|^2 + |k2|^2 -
                  * 2|k1||k2| <= |k1 + k2| |k1|^2 + |k2|^2 + 2|k1||k2|) */
                 if (k*k < 0.8 * (k1*k1 + k2*k2 - 2*k1*k2) ||
                     k*k > 1.2 * (k1*k1 + k2*k2 + 2*k1*k2)) {
                     continue;
                 }
-                
+
                 if (k1 > k_cutoff && k2 > k_cutoff && k > k_cutoff) {
                     D2_A_asymp_sum += gfac2.D2_A[i * nk * nk + j1 * nk + j2];
                     D2_B_asymp_sum += gfac2.D2_B[i * nk * nk + j1 * nk + j2];
@@ -203,16 +210,10 @@ int main(int argc, char *argv[]) {
     printf("Asymptotic D2_B = %.15g\n", D2_B_asymp);
     printf("Mean (D2_A + D2_B)/2 = %.15g\n", D2_asymp);
     printf("Difference = %g\n", D2_B_asymp - D2_A_asymp);
-    
-    /* Timer */
-    gettimeofday(&time_inter, NULL);
-    long unsigned microsec_inter = (time_inter.tv_sec - time_start.tv_sec) * 1000000
-                                 + time_inter.tv_usec - time_start.tv_usec;
-    printf("\nIntegrating second order equations took %.5f s\n\n", microsec_inter/1e6);
-    
+
     /* Do the expensive convolution */
     convolve(N, BoxLen, box, out, &gfac2, k_cutoff, D2_asymp);
-    
+
     /* Timer */
     gettimeofday(&time_stop, NULL);
     long unsigned microsec = (time_stop.tv_sec - time_inter.tv_sec) * 1000000
@@ -228,7 +229,7 @@ int main(int argc, char *argv[]) {
     /* Do the fast convolution with constant kernel using FFTs */
     convolve_fft(N, BoxLen, box, out2);
 
-    /* Add (D2_asymp - 1) times the EdS result, to obtain the difference 
+    /* Add (D2_asymp - 1) times the EdS result, to obtain the difference
      * from the EdS field */
     for (int i=0; i<N*N*N; i++) {
         out[i] += (D2_asymp - 1) * out2[i];
@@ -238,12 +239,12 @@ int main(int argc, char *argv[]) {
     char out_fname2[50] = "out_difference.hdf5";
     writeFieldFile(out, N, BoxLen, out_fname2);
     printf("Output written to '%s'.\n", out_fname2);
-    
+
     /* Finally, add the remainder to obtain the total */
     for (int i=0; i<N*N*N; i++) {
         out[i] += 1 * out2[i];
     }
-    
+
     /* Export the output grid */
     char out_fname3[50] = "out_total.hdf5";
     writeFieldFile(out, N, BoxLen, out_fname3);

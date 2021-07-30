@@ -68,5 +68,8 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                                  int nk, double k_min, double k_max);
 void free_growth_factors(struct growth_factors *gfac);
 void free_growth_factors_2(struct growth_factors_2 *gfac_2);
+void import_growth_factors_2(struct growth_factors_2 *gfac2,
+                             int nk, double k_min, double k_max,
+                             MPI_Comm comm);
 
 #endif

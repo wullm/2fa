@@ -209,14 +209,14 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                     /* Interpolate the growth factors */
                     double D2_A = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_A, ind, u) - D2_asymp;
                     double D2_B = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_B, ind, u) - D2_asymp;
-                    double D2_C1 = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_C1, ind, u);
-                    double D2_C2 = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_C2, ind, u);
+                    // double D2_C1 = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_C1, ind, u);
+                    // double D2_C2 = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_C2, ind, u);
 
                     /* Compute the kernel */
                     fftw_complex K = 0.5 * (D2_A * k1k1 * k2k2 - D2_B * k1k2 * k1k2) / (k * k);
-                    /* And the frame-lagging terms */
+                    /* And the frame-lagging terms (now included in D2_A) */
                     // fftw_complex K_FL = 0.5 * (D2_C1 / k2k2 + D2_C2 / k1k1) * k1k1 * k2k2 * k1k2 / (k * k);
-                    fftw_complex K_FL = 0.5 * (D2_C1 + D2_C2) * k1k1 * k2k2 / (k * k);
+                    // fftw_complex K_FL = 0.5 * (D2_C1 + D2_C2) * k1k1 * k2k2 / (k * k);
 
                     /* Fetch the value of phi(k1) */
                     fftw_complex ph1 = phi_k1[local_count];
@@ -230,7 +230,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                     }
 
                     /* Add the result */
-                    local_sum += (K + K_FL) * (ph1 * ph2) * dk_twopi_3;
+                    local_sum += K * (ph1 * ph2) * dk_twopi_3;
                 }
                 
                 /* Store the result of the convolution at this k */
