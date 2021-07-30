@@ -47,6 +47,7 @@ struct ode_params_2 {
     double *g_asymp;
     double k, k1, k2;
     double f_b;
+    double D_scale_1, D_scale_2;
 };
 
 /* Differential equation for the first order growth factor
@@ -184,7 +185,7 @@ int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
     /* First order growth factor for the cdm+baryon fluid at k1 and k2 */
     double D_cb_k1 = y[0];
     double D_cb_k2 = y[2];
-    double D_cb_k1k2 = D_cb_k1 * D_cb_k2;
+    double D_cb_k1k2 = D_cb_k1 * D_cb_k2 / (p->D_scale_1 * p->D_scale_2);
 
     /* The frame-lagging terms */
     double Fl_1 = (B_k - B_k1) * k1_dot_k2 / (k2*k2);
@@ -342,7 +343,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     gsl_odeiv2_driver_free(d_1);
 
     /* Normalize the growth factor by the value at a_final */
-    double D_asymp_final = strooklat_interp(&spline_tab, D_asymp, a_final);
+    double D_asymp_final = strooklat_interp(&spline_tab, D_asymp, 1.0);
     for (int i=0; i<tab->size; i++) {
         D_asymp[i] /= D_asymp_final;
     }
@@ -385,6 +386,9 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 double k1 = gfac2->k[j1];
                 double k2 = gfac2->k[j2];
                 double k = gfac2->k[i]; // | k | = | k1 + k2 | != | k1 | + | k2 |
+
+                // k1 = k2 = k;
+                // k = sqrt(2) * k;
 
                 /* Skip extreme angles that are not needed */
                 // double ak1 = k1_dot_k2 / (k1*k1);
@@ -432,17 +436,19 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 gsl_odeiv2_driver_apply(d_1_k1_k2, &D_1_k1_k2, 1.0, y_1_k1_k2);
                 gsl_odeiv2_driver_free(d_1_k1_k2);
 
-                // printf("%g %g %g\n", D_start, y_1_k1_k2[0], y_1_k1_k2[1]);
+                // printf("%g %g %g\n", D_start, y_1_k1_k2[0], y_1_k1_k2[2]);
 
                 /* Normalize the growth factors s.t. D(k) = 1 at a = 1 */
-                double D_k1_start = D_start / y_1_k1_k2[0];
-                double D_k2_start = D_start / y_1_k1_k2[2];
+                odep.D_scale_1 = y_1_k1_k2[0];
+                odep.D_scale_2 = y_1_k1_k2[2];
+                double D_k1_start = D_start / odep.D_scale_1;
+                double D_k2_start = D_start / odep.D_scale_2;
                 double D_mean_start = sqrt(D_k1_start * D_k2_start);
 
                 /* Prepare the initial conditions */
                 double D2_EdS = 3./7. * E_theory * D_mean_start * D_mean_start;
                 double D2_EdS_dot = -(6./7.) * E_theory * D_mean_start;
-                double y[12] = {D_k1_start, -1., D_k2_start, -1., D2_EdS, D2_EdS_dot, D2_EdS, D2_EdS_dot, 0, 0, 0, 0};
+                double y[12] = {D_start, -1., D_start, -1., D2_EdS, D2_EdS_dot, D2_EdS, D2_EdS_dot, 0, 0, 0, 0};
 
                 /* The independent variable is the scale-independent growth factor D */
                 double D = D_start;
@@ -462,7 +468,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                     D_next = fmin(D_next, D_final);
 
                     gsl_odeiv2_driver_apply(d, &D, D_next, y);
-                    D2_EdS = (3. / 7.) * y[0] * y[2];
+                    D2_EdS = (3. / 7.) * y[0] * y[2] / (odep.D_scale_1 * odep.D_scale_2);
 
                     // printf("%g %g %g %g %.8g %.8g %.8g %.8g %.8g\n", k, k1, k2, D_next, y[4] / D2_EdS, y[6] / D2_EdS, y[0] / D_next, y[1], strooklat_interp(&spline_D, g_asymp, D_next));
                 }
@@ -478,10 +484,12 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 gfac2->D2_C2[id] = y[10] / D2_EdS;
 
                 // printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, y[8] / D_final, y[10] / D_final, D_final, gfac2->D2_C2[id]);
-                printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, gfac2->D2_A[id], gfac2->D2_B[id], gfac2->D2_C1[id], gfac2->D2_C2[id]);
+                printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, gfac2->D2_A[id], gfac2->D2_B[id], gfac2->D2_C1[id], gfac2->D2_C2[id], y[0] / D_final / odep.D_scale_1, y[2] / D_final / odep.D_scale_1);
             }
         }
     }
+
+    // exit(1);
 
     /* Export the tables as 3D grids */
     char out_fname_A[50] = "table_A.hdf5";
