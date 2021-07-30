@@ -341,10 +341,10 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     /* Finalise the integration */
     gsl_odeiv2_driver_free(d_1);
 
-    /* Normalize the growth factor by the present-day value */
-    double D_asymp_today = strooklat_interp(&spline_tab, D_asymp, a_final);
+    /* Normalize the growth factor by the value at a_final */
+    double D_asymp_final = strooklat_interp(&spline_tab, D_asymp, a_final);
     for (int i=0; i<tab->size; i++) {
-        D_asymp[i] /= D_asymp_today;
+        D_asymp[i] /= D_asymp_final;
     }
 
     /* Create a growth factor spline for the cosmological tables */
@@ -432,13 +432,11 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 gsl_odeiv2_driver_apply(d_1_k1_k2, &D_1_k1_k2, 1.0, y_1_k1_k2);
                 gsl_odeiv2_driver_free(d_1_k1_k2);
 
-                // printf("%g %g\n", y_1_k1_k2[0], y_1_k1_k2[1]);
+                // printf("%g %g %g\n", D_start, y_1_k1_k2[0], y_1_k1_k2[1]);
 
                 /* Normalize the growth factors s.t. D(k) = 1 at a = 1 */
                 double D_k1_start = D_start / y_1_k1_k2[0];
                 double D_k2_start = D_start / y_1_k1_k2[2];
-                double D_dot_k1_start = D_start / y_1_k1_k2[1];
-                double D_dot_k2_start = D_start / y_1_k1_k2[3];
                 double D_mean_start = sqrt(D_k1_start * D_k2_start);
 
                 /* Prepare the initial conditions */
