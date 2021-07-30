@@ -186,6 +186,10 @@ int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
     double D_cb_k2 = y[2];
     double D_cb_k1k2 = D_cb_k1 * D_cb_k2;
 
+    /* The frame-lagging terms */
+    double Fl_1 = (B_k - B_k1) * k1_dot_k2 / (k2*k2);
+    double Fl_2 = (B_k - B_k2) * k1_dot_k2 / (k1*k1);
+
     /* ODE for the first order growth factor evaluated at k1, k2 */
     f[0] = -y[1];
     f[1] = A * y[1] + B_k1 * D_cb_k1;
@@ -194,15 +198,15 @@ int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
 
     /* ODE for the two second order growth factors at (k,k1,k2) */
     f[4] = -y[5];
-    f[5] = A * y[5] + B_k * y[4] + B_k * D_cb_k1k2;
+    f[5] = A * y[5] + B_k * y[4] + (B_k + Fl_1 + Fl_2) * D_cb_k1k2;
     f[6] = -y[7];
     f[7] = A * y[7] + B_k * y[6] + (B_k1 + B_k2 - B_k) * D_cb_k1k2;
 
     /* ODE for the frame-lagging terms at (k,k1,k2) */
     f[8] = -y[9];
-    f[9] = A * y[9] + B_k * y[8] + (B_k - B_k1) * k1_dot_k2 / (k2*k2) * D_cb_k1k2;
+    f[9] = A * y[9] + B_k * y[8] + Fl_1 * D_cb_k1k2;
     f[10] = -y[11];
-    f[11] = A * y[11] + B_k * y[10] + (B_k - B_k2) * k1_dot_k2 / (k1*k1) * D_cb_k1k2;
+    f[11] = A * y[11] + B_k * y[10] + Fl_2 * D_cb_k1k2;
 
     return GSL_SUCCESS;
 }
