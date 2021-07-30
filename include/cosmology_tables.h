@@ -55,4 +55,6 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
                                 struct cosmology_tables *tab, int size,
                                 const double a_min, const double a_max);
 void free_cosmology_tables(struct cosmology_tables *tab);
+double get_a_non_relativic(struct cosmology_tables *tab, double target);
+
 #endif

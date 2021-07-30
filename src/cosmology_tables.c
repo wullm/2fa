@@ -302,6 +302,29 @@ double get_H_of_a(struct cosmology_tables *tab, double a) {
     return Ha;
 }
 
+/* Determine maximum scale factor at which less than target ratio of neutrinos
+ * are relativistic */
+double get_a_non_relativic(struct cosmology_tables *tab, double target_ratio) {
+    /* Make a vector of the ratio of non-relativistic to relativistic nus */
+    double *nr_ratio = malloc(tab->size * sizeof(double));
+    for (int i=0; i<tab->size; i++) {
+        nr_ratio[i] = tab->f_nu_nr[i] / tab->f_nu_tot[i];
+    }
+
+    /* Make an interpolation spline for the non-relativistic ratio */
+    struct strooklat spline_nonrel = {nr_ratio, tab->size};
+    init_strooklat_spline(&spline_nonrel, 100);
+
+    /* Determine a_nr at which half of the neutrinos are non-relativistic */
+    double a_nonrel = strooklat_interp(&spline_nonrel, tab->avec, target_ratio);
+
+    /* Clean up the non-relativistc ratio vector and spline */
+    free_strooklat_spline(&spline_nonrel);
+    free(nr_ratio);
+
+    return a_nonrel;
+}
+
 void free_cosmology_tables(struct cosmology_tables *tab) {
     free(tab->avec);
     free(tab->Avec);
