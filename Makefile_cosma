@@ -1,0 +1,48 @@
+#Compiler options
+GCC = mpicc
+
+#Libraries
+INI_PARSER = parser/minIni.o
+STD_LIBRARIES = -lm
+FFTW_LIBRARIES = -lfftw3 -lfftw3_threads -lfftw3_mpi
+HDF5_LIBRARIES = -lhdf5
+GSL_LIBRARIES = -lgsl -lgslcblas
+
+GSL_INCLUDES =
+
+HDF5_INCLUDES += -I/usr/lib64 -L/usr/lib64 -I/cosma/local/gcc/7.3.0/lib64/ -L/cosma/local/gcc/7.3.0/lib64/ -I/cosma/local/parallel-hdf5/intel_2018_intel_mpi_2018/1.10.3/lib -L/cosma/local/parallel-hdf5/intel_2018_intel_mpi_2018/1.10.3/lib -I/cosma/local/parallel-hdf5/intel_2018_intel_mpi_2018/1.10.3/include
+HDF5_LIBRARIES +=
+
+HDF5_INCLUDES += -I/cosma/local/gcc/7.3.0/include -I/cosma/local/parallel-hdf5/intel_2018_intel_mpi_2018/1.10.3/include
+HDF5_LIBRARIES += -L/cosma/local/parmetis/intel_2018_intel_mpi_2018/4.0.3/lib -L/cosma/local/gcc/7.3.0/lib64/ -Wl,-rpath=/cosma/local/gcc/7.3.0/lib64/   -lm
+
+FIREBOLT_PATH = /cosma5/data/durham/dc-elbe1/firebolt/firebolt/
+FIREBOLT_INCLUDES += -I$(FIREBOLT_PATH)/include
+FIREBOLT_LIBRARIES += -L$(FIREBOLT_PATH) -lfirebolt -Wl,-rpath=$(FIREBOLT_PATH)
+
+#Putting it together
+INCLUDES = $(HDF5_INCLUDES) $(GSL_INCLUDES) $(FIREBOLT_INCLUDES)
+LIBRARIES = $(INI_PARSER) $(STD_LIBRARIES) $(FFTW_LIBRARIES) $(HDF5_LIBRARIES) $(GSL_LIBRARIES) $(FIREBOLT_LIBRARIES)
+CFLAGS = -Wall -Wshadow -fopenmp -march=native -Ofast
+
+ELEMENTS = input cosmology_tables perturb_data titles primordial fluid_equations write_transfers units fluid_equations_2 fft convolve output
+PROGRAMS = 3fa
+
+OBJECTS=$(patsubst %, lib/%.o, $(ELEMENTS))
+OBJECT_SOURCES=$(patsubst %, src/%.c, $(ELEMENTS))
+
+$(PROGRAMS): % : src/%.c $(OBJECTS) $(INI_PARSER) include/*.h
+	$(GCC) src/$@.c -o $@ $(INCLUDES) $(OBJECTS) $(LIBRARIES) $(CFLAGS) $(LDFLAGS)
+
+lib/%.o: src/%.c include/*.h
+	$(GCC) $< -c -o $@ $(INCLUDES) $(CFLAGS)
+
+all: minIni $(PROGRAMS)
+
+minIni:
+	cd parser && make
+
+clean:
+	rm -f lib/*.o
+	rm -f 3fa
+	rm -f parser/minIni.o
