@@ -107,6 +107,11 @@ int main(int argc, char *argv[]) {
     struct cosmology_tables tab;
     integrate_cosmology_tables(&m, &us, &tab, 10000, a_start, fmax(1.01, a_end));
 
+    /* Determine a_nr at which half of the neutrinos are non-relativistic */
+    double target_ratio = 0.5;
+    double a_nonrel = get_a_non_relativic(&tab, target_ratio);
+    double z_nonrel = 1. / a_nonrel - 1.0;
+    printf("z_nonrel = %g.\n", z_nonrel);
     printf("\n");
     printf("Integrating second order fluid equations.\n");
 
@@ -121,8 +126,8 @@ int main(int argc, char *argv[]) {
 
     /* Begin and end for the second order growth factor integration */
     struct growth_factors_2 gfac2;
-    integrate_fluid_equations_2(&m, &us, &tab, &ptdat, &gfac2, a_end, nk,
-                                k_min, k_max);
+    integrate_fluid_equations_2(&m, &us, &tab, &ptdat, &gfac2, a_nonrel, a_end,
+                                nk, k_min, k_max);
     // import_growth_factors_2(&gfac2, nk, k_min, k_max, MPI_COMM_WORLD);
 
     /* Timer */
@@ -138,7 +143,6 @@ int main(int argc, char *argv[]) {
 
     char field_fname[50] = "phi.hdf5";
 
-    printf("\n");
     printf("Reading input field from %s.\n", field_fname);
 
     /* Get the dimensions of the cluster */
@@ -210,6 +214,7 @@ int main(int argc, char *argv[]) {
     printf("Asymptotic D2_B = %.15g\n", D2_B_asymp);
     printf("Mean (D2_A + D2_B)/2 = %.15g\n", D2_asymp);
     printf("Difference = %g\n", D2_B_asymp - D2_A_asymp);
+    printf("\n");
 
     /* Do the expensive convolution */
     convolve(N, BoxLen, box, out, &gfac2, k_cutoff, D2_asymp);

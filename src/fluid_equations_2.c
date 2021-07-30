@@ -129,9 +129,9 @@ void compute_A_B_factors(double D, struct ode_params_2 *p, double *A_ref,
     *A_ref = A;
 
     /* Pre-factor for the Poisson source terms */
-    *B_k_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k) * (1.0 - f_nu_tot_0);
-    *B_k1_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k1) * (1.0 - f_nu_tot_0);
-    *B_k2_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k2) * (1.0 - f_nu_tot_0);
+    *B_k_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k);
+    *B_k1_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k1);
+    *B_k2_ref = B * (1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k2);
 }
 
 /* Differential equation for scale-depndent first order growth factors at k1,k2
@@ -214,8 +214,9 @@ int ode_2nd_order(double D, const double y[12], double f[12], void *params) {
 void integrate_fluid_equations_2(struct model *m, struct units *us,
                                  struct cosmology_tables *tab,
                                  struct perturb_data *ptdat,
-                                 struct growth_factors_2 *gfac2, double a_final,
-                                 int nk, double k_min, double k_max) {
+                                 struct growth_factors_2 *gfac2, double a_start,
+                                 double a_final, int nk, double k_min,
+                                 double k_max) {
 
     /* Find the necessary titles in the perturbation vector */
     int d_cdm = findTitle(ptdat->titles, "d_cdm", ptdat->n_functions);
@@ -298,29 +299,32 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     const double H_0 = m->h * 100 * KM_METRES / MPC_METRES * us->UnitTimeSeconds;
     const double Omega_cb = m->Omega_c + m->Omega_b;
     const double f_nu_tot_0 = strooklat_interp(&spline_tab, tab->f_nu_tot, 1.);
-    const double B_0 = H_0 * H_0 * Omega_cb / (1.0 - f_nu_tot_0);
+    const double B_0 = H_0 * H_0 * Omega_cb;
 
     /* Start integrating at the beginning of the cosmological table */
-    double log_a_start = log(tab->avec[0]);
-    double log_a = log_a_start;
+    /* NB: This is typically much earlier than a_start for the second order! */
+    double log_a_table_start = log(tab->avec[0]);
+    double log_a = log_a_table_start;
     double H_start = tab->Hvec[0];
 
     /* Compute pre-initial conditions */
-    double a_and_a_half = exp(1.5 * log_a_start);
+    double a_and_a_half = exp(1.5 * log_a_table_start);
     double inv_sqrt_g_start = 0.25 * (sqrt(1.0 + 24 * (1.0 - f_nu_tot_0)) - 1.0) / sqrt(1.0 - f_nu_tot_0);
     double g_start = 1.0 / (inv_sqrt_g_start * inv_sqrt_g_start);
     double D_dot_start = inv_sqrt_g_start / a_and_a_half * sqrt(B_0);
 
-    printf("(g_start, H_start) = (%.10g, %.10g)\n\n", g_start, H_start);
+    /* Theoretical steady state value for second order growth factors */
+    double E_theory = (21.0/2.0) * g_start / (6. + (9./2.) * g_start);
+    printf("(g_start, H_start, E_theory) = (%.10g, %.10g, %.10g)\n\n", g_start, H_start, E_theory);
 
     /* Start in the asymptotic limit */
     double y_1[2] = {1.0, -D_dot_start/H_start};
 
     /* Integrate up to the scale factor of each row in the cosmological table */
     for (int i=0; i<tab->size; i++) {
-        double loga_final = log(tab->avec[i]);
+        double log_a_final = log(tab->avec[i]);
 
-        gsl_odeiv2_driver_apply(d_1, &log_a, loga_final, y_1);
+        gsl_odeiv2_driver_apply(d_1, &log_a, log_a_final, y_1);
 
         /* Compute g = (D^2 / D_dot^2) / a^3 B_0 */
         double a = tab->avec[i];
@@ -338,7 +342,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     gsl_odeiv2_driver_free(d_1);
 
     /* Normalize the growth factor by the present-day value */
-    double D_asymp_today = strooklat_interp(&spline_tab, D_asymp, 1.0);
+    double D_asymp_today = strooklat_interp(&spline_tab, D_asymp, a_final);
     for (int i=0; i<tab->size; i++) {
         D_asymp[i] /= D_asymp_today;
     }
@@ -413,11 +417,11 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
 
                 /* Integrate from the start of the cosmological table up to
                  * the growth factor corresponding to a_final */
-                double D_start = D_asymp[0];
+                double D_start = strooklat_interp(&spline_tab, D_asymp, a_start);
                 double D_final = strooklat_interp(&spline_tab, D_asymp, a_final);
 
                 /* Prepare the scale-dependent first order growth factors */
-                double y_1_k1_k2[4] = {1., -1., 1., -1.};
+                double y_1_k1_k2[4] = {D_start, -1., D_start, -1.};
 
                 /* Integrate the scale-dependent 1st order factors up to a = 1 */
                 double tol_1_k1_k2 = 1e-6;
@@ -428,17 +432,19 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 gsl_odeiv2_driver_apply(d_1_k1_k2, &D_1_k1_k2, 1.0, y_1_k1_k2);
                 gsl_odeiv2_driver_free(d_1_k1_k2);
 
+                // printf("%g %g\n", y_1_k1_k2[0], y_1_k1_k2[1]);
+
                 /* Normalize the growth factors s.t. D(k) = 1 at a = 1 */
-                double D_k1_start = 1. / y_1_k1_k2[0];
-                double D_k2_start = 1. / y_1_k1_k2[2];
+                double D_k1_start = D_start / y_1_k1_k2[0];
+                double D_k2_start = D_start / y_1_k1_k2[2];
+                double D_dot_k1_start = D_start / y_1_k1_k2[1];
+                double D_dot_k2_start = D_start / y_1_k1_k2[3];
                 double D_mean_start = sqrt(D_k1_start * D_k2_start);
 
-                /* Compute steady state solution at early times in asymptotic limit */
-                double E_theory = (21.0/2.0) * g_start / (6. + (9./2.) * g_start);
                 /* Prepare the initial conditions */
                 double D2_EdS = 3./7. * E_theory * D_mean_start * D_mean_start;
                 double D2_EdS_dot = -(6./7.) * E_theory * D_mean_start;
-                double y[12] = {D_k1_start, -D_k1_start, D_k2_start, -D_k2_start, D2_EdS, D2_EdS_dot, D2_EdS, D2_EdS_dot, 0, 0, 0, 0};
+                double y[12] = {D_k1_start, -1., D_k2_start, -1., D2_EdS, D2_EdS_dot, D2_EdS, D2_EdS_dot, 0, 0, 0, 0};
 
                 /* The independent variable is the scale-independent growth factor D */
                 double D = D_start;
@@ -460,7 +466,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                     gsl_odeiv2_driver_apply(d, &D, D_next, y);
                     D2_EdS = (3. / 7.) * y[0] * y[2];
 
-                    // printf("%g %g %g %g %.8g %.8g %.8g %.8g %.8g\n", k, k1, k2, D_next, y[0] / D2_EdS, y[2] / D2_EdS, y[4] / D2_EdS, y[6] / D2_EdS, strooklat_interp(&spline_D, g_asymp, D_next));
+                    // printf("%g %g %g %g %.8g %.8g %.8g %.8g %.8g\n", k, k1, k2, D_next, y[4] / D2_EdS, y[6] / D2_EdS, y[0] / D_next, y[1], strooklat_interp(&spline_D, g_asymp, D_next));
                 }
 
                 // exit(1);

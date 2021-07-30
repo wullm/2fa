@@ -64,8 +64,9 @@ void integrate_fluid_equations(struct model *m, struct units *us,
 void integrate_fluid_equations_2(struct model *m, struct units *us,
                                  struct cosmology_tables *tab,
                                  struct perturb_data *ptdat,
-                                 struct growth_factors_2 *gfac2, double a_final,
-                                 int nk, double k_min, double k_max);
+                                 struct growth_factors_2 *gfac2, double a_start,
+                                 double a_final, int nk, double k_min,
+                                 double k_max);
 void free_growth_factors(struct growth_factors *gfac);
 void free_growth_factors_2(struct growth_factors_2 *gfac_2);
 void import_growth_factors_2(struct growth_factors_2 *gfac2,
