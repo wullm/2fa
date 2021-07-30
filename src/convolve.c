@@ -162,8 +162,14 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                 int ind[3];
                 double u[3];
                 strooklat_find_x(&spline_k, k, &ind[0], &u[0]);
-                
+
                 fftw_complex local_sum = 0;
+
+                /* Skip irrelevant cells */
+                if (k*k >= 4.0 * k_cutoff2) {
+                    fout[id] = 0;
+                    continue;
+                }
 
                 /* Perform the integral */
                 for (int local_count = 0; local_count < relevant_cells; local_count++) {
@@ -185,10 +191,10 @@ void convolve(int N, double boxlen, const double *phi, double *out,
 
                     /* Skip the DC mode */
                     if (k2k2 == 0.) continue;
-                    
+
                     /* Skip irrelevant cells */
                     if (k2k2 >= k_cutoff2) continue;
-                    
+
                     /* The first wavevector */
                     double k1x = (x1 > N/2) ? (x1 - N) * dk : x1 * dk;
                     double k1y = (y1 > N/2) ? (y1 - N) * dk : y1 * dk;
@@ -232,7 +238,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                     /* Add the result */
                     local_sum += K * (ph1 * ph2) * dk_twopi_3;
                 }
-                
+
                 /* Store the result of the convolution at this k */
                 fout[id] = local_sum;
             }
