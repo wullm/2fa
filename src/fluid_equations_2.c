@@ -342,10 +342,10 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     /* Finalise the integration */
     gsl_odeiv2_driver_free(d_1);
 
-    /* Normalize the growth factor by the value at a_final */
-    double D_asymp_final = strooklat_interp(&spline_tab, D_asymp, 1.0);
+    /* Normalize the growth factor by the present-day value */
+    double D_asymp_today = strooklat_interp(&spline_tab, D_asymp, 1.0);
     for (int i=0; i<tab->size; i++) {
-        D_asymp[i] /= D_asymp_final;
+        D_asymp[i] /= D_asymp_today;
     }
 
     /* Create a growth factor spline for the cosmological tables */
@@ -367,6 +367,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     gfac2->D2_B = malloc(nk * nk * nk * sizeof(double));
     gfac2->D2_C1 = malloc(nk * nk * nk * sizeof(double));
     gfac2->D2_C2 = malloc(nk * nk * nk * sizeof(double));
+    gfac2->D2_naive = malloc(nk * nk * nk * sizeof(double));
 
     /* Initialize the wavenumbers at which to compute the second order kernel */
     for (int i=0; i<nk; i++) {
@@ -477,14 +478,25 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
 
                 gsl_odeiv2_driver_free(d);
 
+                /* Store the integrated results */
                 int id = i * nk * nk + j1 * nk + j2;
                 gfac2->D2_A[id] = y[4] / D2_EdS;
                 gfac2->D2_B[id] = y[6] / D2_EdS;
                 gfac2->D2_C1[id] = y[8] / D2_EdS;
                 gfac2->D2_C2[id] = y[10] / D2_EdS;
 
+                /* Compute and store the approximate value */
+                double f_nu_over_f_cb = f_nu_tot_0 / (1.0 - f_nu_tot_0);
+                double ratio_k = strooklat_interp_2d(&spline_a, &spline_k, odep.ratio_dnu_dcb, a_final, k);
+                double ratio_k1 = strooklat_interp_2d(&spline_a, &spline_k, odep.ratio_dnu_dcb, a_final, k1);
+                double ratio_k2 = strooklat_interp_2d(&spline_a, &spline_k, odep.ratio_dnu_dcb, a_final, k2);
+                double E_k = (1.0 + f_nu_over_f_cb * ratio_k);
+                double E_k1 = (1.0 + f_nu_over_f_cb * ratio_k1);
+                double E_k2 = (1.0 + f_nu_over_f_cb * ratio_k2);
+                gfac2->D2_naive[id] = E_k1 * E_k2 / E_k;
+
                 // printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, y[8] / D_final, y[10] / D_final, D_final, gfac2->D2_C2[id]);
-                printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, gfac2->D2_A[id], gfac2->D2_B[id], gfac2->D2_C1[id], gfac2->D2_C2[id], y[0] / D_final / odep.D_scale_1, y[2] / D_final / odep.D_scale_1);
+                printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, gfac2->D2_A[id], gfac2->D2_B[id], gfac2->D2_C1[id], gfac2->D2_C2[id], y[0] / D_final / odep.D_scale_1, y[2] / D_final / odep.D_scale_1, gfac2->D2_naive[id]);
             }
         }
     }
@@ -562,4 +574,5 @@ void free_growth_factors_2(struct growth_factors_2 *gfac2) {
     free(gfac2->D2_B);
     free(gfac2->D2_C1);
     free(gfac2->D2_C2);
+    free(gfac2->D2_naive);
 }

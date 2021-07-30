@@ -51,6 +51,8 @@ struct growth_factors_2 {
     double *D2_B;
     double *D2_C1;
     double *D2_C2;
+    /* A naive implementation of a single second order growth factor */
+    double *D2_naive;
     /* Size of the wavenumber vectors (arrays are nk x nk x nk) */
     int nk;
 };
