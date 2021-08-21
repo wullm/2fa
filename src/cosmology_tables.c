@@ -233,7 +233,7 @@ void integrate_cosmology_tables(struct model *m, struct units *us,
         tab->f_g[i] = (Omega_CMB + Omega_ur) / (Omega_cb + Omega_nu_0) / tab->avec[i];
     }
 
-    printf("f_nu_0 = %.10g\n", Omega_nu_0 / (Omega_cb + Omega_nu_0));
+    // printf("f_nu_0 = %.10g\n", Omega_nu_0 / (Omega_cb + Omega_nu_0));
 
     /* Now, create a table with the Hubble rate */
     for (int i=0; i<size; i++) {

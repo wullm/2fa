@@ -30,7 +30,7 @@
 
 void convolve(int N, double boxlen, const double *phi, double *out,
               struct growth_factors_2 *gfac2, double k_cutoff,
-              double D2_asymp) {
+              double D2_asymp, int X_min, int X_max, int verbose) {
 
     /* Allocate grids for the Fourier transforms */
     fftw_complex *fphi = malloc(N * N * (N/2+1) * sizeof(fftw_complex));
@@ -86,7 +86,10 @@ void convolve(int N, double boxlen, const double *phi, double *out,
         }
     }
 
-    printf("There are %lld relevant cells in the inner loop.\n", relevant_cells);
+    if (verbose) {
+        printf("\n");
+        printf("There are %lld relevant cells in the inner loop.\n", relevant_cells);
+    }
 
     /* Allocate memory for pre-computed inner loop quantities */
     double *u_k1_vec = malloc(relevant_cells * sizeof(double));
@@ -142,12 +145,14 @@ void convolve(int N, double boxlen, const double *phi, double *out,
         }
     }
 
-    printf("Done with pre-computation of the inner loop.\n");
-    printf("Performing convolution.\n\n");
+    if (verbose) {
+        printf("Done with pre-computation of the inner loop.\n");
+        printf("Performing convolution.\n\n");
+    }
 
     /* Do the convolution */
     #pragma omp parallel for
-    for (int x=0; x<N; x++) {
+    for (int x=X_min; x<X_max; x++) {
         for (int y=0; y<N; y++) {
             for (int z=0; z<=N/2; z++) {
                 /* Calculate the wavevector */
@@ -243,11 +248,8 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                 fout[id] = local_sum;
             }
         }
-        if (x % 10 == 0) printf("%d / %d\n", x, N);
+        if (x % 10 == 0 && verbose) printf("%d / %d\n", x, N);
     }
-
-    printf("\n");
-    printf("Done with convolution.\n");
 
     /* Free the memory of the inner loop pre-computations */
     free(phi_k1);

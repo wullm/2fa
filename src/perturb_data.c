@@ -26,7 +26,6 @@
 
 /* Read the perturbation data from file */
 int readPerturb(struct params *pars, struct units *us, struct perturb_data *pt) {
-    printf("Reading cosmological perturbations from '%s'.\n", pars->PerturbFile);
 
     /* Open the hdf5 file (file exists error handled by HDF5) */
     hid_t h_file = H5Fopen(pars->PerturbFile, H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -340,8 +339,6 @@ int mergeBackgroundDensities(struct perturb_data *pt, char *title_a, char *title
 
 int readPerturbParams(struct params *pars, struct units *us,
                       struct perturb_params *ptpars) {
-
-    printf("Reading cosmological parameters from '%s'.\n", pars->PerturbFile);
 
     /* Open the hdf5 file (file exists error handled by HDF5) */
     hid_t h_file = H5Fopen(pars->PerturbFile, H5F_ACC_RDONLY, H5P_DEFAULT);

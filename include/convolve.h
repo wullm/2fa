@@ -24,7 +24,7 @@
 
 void convolve(int N, double boxlen, const double *phi, double *out,
               struct growth_factors_2 *gfac2, double k_cutoff,
-              double D2_asymp);
+              double D2_asymp, int X_min, int X_max, int verbose);
 void convolve_fft(int N, double boxlen, const double *phi, double *out);
 
 #endif

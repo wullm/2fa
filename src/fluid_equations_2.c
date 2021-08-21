@@ -217,7 +217,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                                  struct perturb_data *ptdat,
                                  struct growth_factors_2 *gfac2, double a_start,
                                  double a_final, int nk, double k_min,
-                                 double k_max) {
+                                 double k_max, int write_tables, int verbose) {
 
     /* Find the necessary titles in the perturbation vector */
     int d_cdm = findTitle(ptdat->titles, "d_cdm", ptdat->n_functions);
@@ -316,7 +316,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
 
     /* Theoretical steady state value for second order growth factors */
     double E_theory = (21.0/2.0) * g_start / (6. + (9./2.) * g_start);
-    printf("(g_start, H_start, E_theory) = (%.10g, %.10g, %.10g)\n\n", g_start, H_start, E_theory);
+    if (verbose) printf("(g_start, H_start, E_theory) = (%.10g, %.10g, %.10g)\n\n", g_start, H_start, E_theory);
 
     /* Start in the asymptotic limit */
     double y_1[2] = {1.0, -D_dot_start/H_start};
@@ -374,8 +374,10 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
         gfac2->k[i] = k_min * exp(i * (log_k_max - log_k_min) / nk);
     }
 
-    printf("(%%) k k1 k2 : D2_A D2_B D2_C1 D2_C2\n");
-    printf("==============================================================\n");
+    if (verbose) {
+        printf("(%%) k k1 k2 : D2_A D2_B D2_C1 D2_C2\n");
+        printf("==============================================================\n");
+    }
 
     /* Perform the second-order growth factor calculation */
     /* We loop over values of the arguments D_2(k, k1, k2) */
@@ -513,6 +515,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 double E_k2 = (1.0 + f_nu_over_f_cb * ratio_k2);
                 gfac2->D2_naive[id] = E_k1 * E_k2 / E_k;
 
+                if (verbose)
                 // printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, y[8] / D_final, y[10] / D_final, D_final, gfac2->D2_C2[id]);
                 printf("(%.3f%%) %g %g %g : %.8g %.8g %.8g %.8g %.8g %.8g %.8g\n", (i * nk * nk + j1 * nk + j2) * 100.0 / (nk * nk * nk), k, k1, k2, gfac2->D2_A[id], gfac2->D2_B[id], gfac2->D2_C1[id], gfac2->D2_C2[id], y[0] / D_final / odep.D_scale_1, y[2] / D_final / odep.D_scale_1, gfac2->D2_naive[id]);
             }
@@ -521,19 +524,21 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
 
     // exit(1);
 
-    /* Export the tables as 3D grids */
-    char out_fname_A[50] = "table_A.hdf5";
-    char out_fname_B[50] = "table_B.hdf5";
-    char out_fname_C1[50] = "table_C1.hdf5";
-    char out_fname_C2[50] = "table_C2.hdf5";
-    writeFieldFile(gfac2->D2_A, nk, 1.0, out_fname_A);
-    printf("Table A written to '%s'.\n", out_fname_A);
-    writeFieldFile(gfac2->D2_B, nk, 1.0, out_fname_B);
-    printf("Table B written to '%s'.\n", out_fname_B);
-    writeFieldFile(gfac2->D2_C1, nk, 1.0, out_fname_C1);
-    printf("Table C1 written to '%s'.\n", out_fname_C1);
-    writeFieldFile(gfac2->D2_C2, nk, 1.0, out_fname_C2);
-    printf("Table C2 written to '%s'.\n", out_fname_C2);
+    if (write_tables) {
+        /* Export the tables as 3D grids */
+        char out_fname_A[50] = "table_A.hdf5";
+        char out_fname_B[50] = "table_B.hdf5";
+        char out_fname_C1[50] = "table_C1.hdf5";
+        char out_fname_C2[50] = "table_C2.hdf5";
+        writeFieldFile(gfac2->D2_A, nk, 1.0, out_fname_A);
+        printf("Table A written to '%s'.\n", out_fname_A);
+        writeFieldFile(gfac2->D2_B, nk, 1.0, out_fname_B);
+        printf("Table B written to '%s'.\n", out_fname_B);
+        writeFieldFile(gfac2->D2_C1, nk, 1.0, out_fname_C1);
+        printf("Table C1 written to '%s'.\n", out_fname_C1);
+        writeFieldFile(gfac2->D2_C2, nk, 1.0, out_fname_C2);
+        printf("Table C2 written to '%s'.\n", out_fname_C2);
+    }
 
     /* Free the perturbation splines */
     free_strooklat_spline(&spline_a);
