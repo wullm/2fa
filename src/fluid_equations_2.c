@@ -425,8 +425,27 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 double D_start = strooklat_interp(&spline_tab, D_asymp, a_start);
                 double D_final = strooklat_interp(&spline_tab, D_asymp, a_final);
 
+                /* Ratio of neutrino density to cdm+baryon density at k, k1, k2 */
+                double ratio_dnu_dcb_k = strooklat_interp_2d(&spline_a, &spline_k, ratio_dnu_dcb, a_start, k);
+                double ratio_dnu_dcb_k1 = strooklat_interp_2d(&spline_a, &spline_k, ratio_dnu_dcb, a_start, k1);
+                double ratio_dnu_dcb_k2 = strooklat_interp_2d(&spline_a, &spline_k, ratio_dnu_dcb, a_start, k2);
+
+                double f_nu_over_f_cb = f_nu_tot_0 / (1.0 - f_nu_tot_0);
+                double B_factor_k = 1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k;
+                double B_factor_k1 = 1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k1;
+                double B_factor_k2 = 1.0 + f_nu_over_f_cb * ratio_dnu_dcb_k2;
+
+                double q_k1 = 0.25 * (sqrt(24 * B_factor_k1 * g_start + 9 * g_start * g_start - 12 * g_start + 4) - 3 * g_start + 2);
+                double q_k2 = 0.25 * (sqrt(24 * B_factor_k2 * g_start + 9 * g_start * g_start - 12 * g_start + 4) - 3 * g_start + 2);
+
+                double E_theory_kdep = -7.0 * B_factor_k * g_start / (3 * B_factor_k * g_start - (q_k1 + q_k2) * (3 * g_start + 2 * (q_k1 + q_k2 - 1.0)));
+                double iD_k1 = pow(D_start, q_k1);
+                double iD_k2 = pow(D_start, q_k2);
+                double Ddot_k1 = q_k1 * pow(D_start, q_k1 - 1);
+                double Ddot_k2 = q_k2 * pow(D_start, q_k2 - 1);
+
                 /* Prepare the scale-dependent first order growth factors */
-                double y_1_k1_k2[4] = {D_start, -1., D_start, -1.};
+                double y_1_k1_k2[4] = {iD_k1, -Ddot_k1, iD_k1, -Ddot_k2};
 
                 /* Integrate the scale-dependent 1st order factors up to a = 1 */
                 double tol_1_k1_k2 = 1e-6;
@@ -442,14 +461,14 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 /* Normalize the growth factors s.t. D(k) = 1 at a = 1 */
                 odep.D_scale_1 = y_1_k1_k2[0];
                 odep.D_scale_2 = y_1_k1_k2[2];
-                double D_k1_start = D_start / odep.D_scale_1;
-                double D_k2_start = D_start / odep.D_scale_2;
+                double D_k1_start = iD_k1 / odep.D_scale_1;
+                double D_k2_start = iD_k2 / odep.D_scale_2;
                 double D_mean_start = sqrt(D_k1_start * D_k2_start);
 
                 /* Prepare the initial conditions */
-                double D2_EdS = 3./7. * E_theory * D_mean_start * D_mean_start;
-                double D2_EdS_dot = -(6./7.) * E_theory * D_mean_start;
-                double y[12] = {D_start, -1., D_start, -1., D2_EdS, D2_EdS_dot, D2_EdS, D2_EdS_dot, 0, 0, 0, 0};
+                double D2_EdS = 3./7. * E_theory_kdep * D_mean_start * D_mean_start;
+                double D2_EdS_dot = -(3./7.) * E_theory_kdep * D_mean_start * D_mean_start / D_start * (q_k1 + q_k2);
+                double y[12] = {iD_k1, -Ddot_k1, iD_k2, -Ddot_k2, D2_EdS, D2_EdS_dot, D2_EdS, D2_EdS_dot, 0, 0, 0, 0};
 
                 /* The independent variable is the scale-independent growth factor D */
                 double D = D_start;
@@ -471,7 +490,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                     gsl_odeiv2_driver_apply(d, &D, D_next, y);
                     D2_EdS = (3. / 7.) * y[0] * y[2] / (odep.D_scale_1 * odep.D_scale_2);
 
-                    // printf("%g %g %g %g %.8g %.8g %.8g %.8g %.8g\n", k, k1, k2, D_next, y[4] / D2_EdS, y[6] / D2_EdS, y[0] / D_next, y[1], strooklat_interp(&spline_D, g_asymp, D_next));
+                    // printf("%g %g %g %g %.8g %.8g %.8g %.8g %.8g\n", k, k1, k2, D_next, y[4] / D2_EdS, y[6] / D2_EdS, y[0] / D_next / odep.D_scale_1, y[1], strooklat_interp(&spline_D, g_asymp, D_next));
                 }
 
                 // exit(1);
@@ -486,7 +505,6 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
                 gfac2->D2_C2[id] = y[10] / D2_EdS;
 
                 /* Compute and store the approximate value */
-                double f_nu_over_f_cb = f_nu_tot_0 / (1.0 - f_nu_tot_0);
                 double ratio_k = strooklat_interp_2d(&spline_a, &spline_k, odep.ratio_dnu_dcb, a_final, k);
                 double ratio_k1 = strooklat_interp_2d(&spline_a, &spline_k, odep.ratio_dnu_dcb, a_final, k1);
                 double ratio_k2 = strooklat_interp_2d(&spline_a, &spline_k, odep.ratio_dnu_dcb, a_final, k2);
