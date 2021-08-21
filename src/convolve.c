@@ -248,7 +248,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                 fout[id] = local_sum;
             }
         }
-        if (x % 10 == 0 && verbose) printf("%d / %d\n", x, N);
+        if (x % 10 == 0) printf("%d / %d\n", x, N);
     }
 
     /* Free the memory of the inner loop pre-computations */
