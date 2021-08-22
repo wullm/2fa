@@ -530,6 +530,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
         char out_fname_B[50] = "table_B.hdf5";
         char out_fname_C1[50] = "table_C1.hdf5";
         char out_fname_C2[50] = "table_C2.hdf5";
+        char out_fname_D2_naive[50] = "table_D2_naive.hdf5";
         writeFieldFile(gfac2->D2_A, nk, 1.0, out_fname_A);
         printf("Table A written to '%s'.\n", out_fname_A);
         writeFieldFile(gfac2->D2_B, nk, 1.0, out_fname_B);
@@ -538,6 +539,8 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
         printf("Table C1 written to '%s'.\n", out_fname_C1);
         writeFieldFile(gfac2->D2_C2, nk, 1.0, out_fname_C2);
         printf("Table C2 written to '%s'.\n", out_fname_C2);
+        writeFieldFile(gfac2->D2_naive, nk, 1.0, out_fname_D2_naive);
+        printf("Table D2_naive written to '%s'.\n", out_fname_D2_naive);
     }
 
     /* Free the perturbation splines */
@@ -577,6 +580,7 @@ void import_growth_factors_2(struct growth_factors_2 *gfac2,
     char out_fname_B[50] = "table_B.hdf5";
     char out_fname_C1[50] = "table_C1.hdf5";
     char out_fname_C2[50] = "table_C2.hdf5";
+    char out_fname_D2_naive[50] = "table_D2_naive.hdf5";
     readFieldFile_MPI(&gfac2->D2_A, &nk_read, &BoxLen, comm, out_fname_A);
     assert(nk_read == nk);
     printf("Table A read from '%s'.\n", out_fname_A);
@@ -589,6 +593,9 @@ void import_growth_factors_2(struct growth_factors_2 *gfac2,
     readFieldFile_MPI(&gfac2->D2_C2, &nk_read, &BoxLen, comm, out_fname_C2);
     assert(nk_read == nk);
     printf("Table C2 read from '%s'.\n", out_fname_C2);
+    readFieldFile_MPI(&gfac2->D2_naive, &nk_read, &BoxLen, comm, out_fname_D2_naive);
+    assert(nk_read == nk);
+    printf("Table D2_naive read from '%s'.\n", out_fname_D2_naive);
 }
 
 void free_growth_factors_2(struct growth_factors_2 *gfac2) {

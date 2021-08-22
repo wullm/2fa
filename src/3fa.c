@@ -143,8 +143,8 @@ int main(int argc, char *argv[]) {
         printf("Integrating second order fluid equations.\n");
 
         /* Wavenumbers for the 3D table of second-order growth factors (k,k1,k2) */
-        const double k_min = 2 * M_PI / 300. * 0.9;
-        const double k_max = 2 * M_PI / 300. * 540 * 2;
+        const double k_min = 2 * M_PI / BoxLen * 0.9;
+        const double k_max = 2 * M_PI / BoxLen * N * 2;
         const int nk = 7;
 
         /* Timer */
