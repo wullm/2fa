@@ -581,19 +581,19 @@ void import_growth_factors_2(struct growth_factors_2 *gfac2,
     char out_fname_C1[50] = "table_C1.hdf5";
     char out_fname_C2[50] = "table_C2.hdf5";
     char out_fname_D2_naive[50] = "table_D2_naive.hdf5";
-    readFieldFile_MPI(&gfac2->D2_A, &nk_read, &BoxLen, comm, out_fname_A);
+    readFieldFile(&gfac2->D2_A, &nk_read, &BoxLen, out_fname_A);
     assert(nk_read == nk);
     printf("Table A read from '%s'.\n", out_fname_A);
-    readFieldFile_MPI(&gfac2->D2_B, &nk_read, &BoxLen, comm, out_fname_B);
+    readFieldFile(&gfac2->D2_B, &nk_read, &BoxLen, out_fname_B);
     assert(nk_read == nk);
     printf("Table B read from '%s'.\n", out_fname_B);
-    readFieldFile_MPI(&gfac2->D2_C1, &nk_read, &BoxLen, comm, out_fname_C1);
+    readFieldFile(&gfac2->D2_C1, &nk_read, &BoxLen, out_fname_C1);
     assert(nk_read == nk);
     printf("Table C1 read from '%s'.\n", out_fname_C1);
-    readFieldFile_MPI(&gfac2->D2_C2, &nk_read, &BoxLen, comm, out_fname_C2);
+    readFieldFile(&gfac2->D2_C2, &nk_read, &BoxLen, out_fname_C2);
     assert(nk_read == nk);
     printf("Table C2 read from '%s'.\n", out_fname_C2);
-    readFieldFile_MPI(&gfac2->D2_naive, &nk_read, &BoxLen, comm, out_fname_D2_naive);
+    readFieldFile(&gfac2->D2_naive, &nk_read, &BoxLen, out_fname_D2_naive);
     assert(nk_read == nk);
     printf("Table D2_naive read from '%s'.\n", out_fname_D2_naive);
 }
