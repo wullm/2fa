@@ -371,7 +371,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
 
     /* Initialize the wavenumbers at which to compute the second order kernel */
     for (int i=0; i<nk; i++) {
-        gfac2->k[i] = k_min * exp(i * (log_k_max - log_k_min) / nk);
+        gfac2->k[i] = k_min * exp(i * (log_k_max - log_k_min) / (nk - 1));
     }
 
     if (verbose) {

@@ -45,12 +45,19 @@ struct params {
     double ScaleFactorBegin;
     double ScaleFactorEnd;
     double ScaleFactorStep;
+    double CutOffScale;
+    int WaveNumberSize;
+    int ImportGrowthFactorTables;
+
+    /* Input parameters */
+    char *InputFilename;
+    char *SecondOrderPotentialFile;
+    int ImportSecondOrderPotential;
 
     /* Output parameters */
     char *OutputDirectory;
     char *OutputFilename;
     char *ExportName;
-    char OutputFields;
 
     /* MPI rank (generated automatically) */
     int rank;

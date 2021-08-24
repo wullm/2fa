@@ -34,8 +34,12 @@ int readParams(struct params *pars, const char *fname) {
      pars->ScaleFactorBegin = ini_getd("Simulation", "ScaleFactorBegin", 0.005, fname);
      pars->ScaleFactorEnd = ini_getd("Simulation", "ScaleFactorEnd", 0.01, fname);
      pars->ScaleFactorStep = ini_getd("Simulation", "ScaleFactorStep", 0.05, fname);
+     pars->ImportSecondOrderPotential = ini_getl("Input", "ImportSecondOrderPotential", 0, fname);
 
-     pars->OutputFields = ini_getl("Output", "OutputFields", 1, fname);
+     /* 2LPT parameters */
+     pars->CutOffScale = ini_getd("Simulation", "CutOffScale", 0., fname);
+     pars->WaveNumberSize = ini_getl("Simulation", "WaveNumberSize", 100, fname);
+     pars->ImportGrowthFactorTables = ini_getl("Simulation", "ImportGrowthFactorTables", 0, fname);
 
      /* Read strings */
      int len = DEFAULT_STRING_LENGTH;
@@ -46,11 +50,15 @@ int readParams(struct params *pars, const char *fname) {
      pars->PerturbFile = malloc(len);
      pars->GaussianRandomFieldFile = malloc(len);
      pars->TransferFunctionDensity = malloc(len);
+     pars->InputFilename = malloc(len);
+     pars->SecondOrderPotentialFile = malloc(len);
      pars->Gauge = malloc(len);
      ini_gets("Output", "Directory", "./output", pars->OutputDirectory, len, fname);
      ini_gets("Simulation", "Name", "No Name", pars->Name, len, fname);
      ini_gets("Simulation", "Gauge", "Newtonian", pars->Gauge, len, fname);
      ini_gets("Output", "Filename", "particles.hdf5", pars->OutputFilename, len, fname);
+     ini_gets("Input", "Filename", "phi.hdf5", pars->InputFilename, len, fname);
+     ini_gets("Input", "SecondOrderPotentialFile", "", pars->SecondOrderPotentialFile, len, fname);
      ini_gets("Output", "ExportName", "PartType6", pars->ExportName, len, fname);
      ini_gets("PerturbData", "File", "", pars->PerturbFile, len, fname);
      ini_gets("PerturbData", "TransferFunctionDensity", "", pars->TransferFunctionDensity, len, fname);
@@ -81,6 +89,8 @@ int cleanParams(struct params *pars) {
     free(pars->GaussianRandomFieldFile);
     free(pars->TransferFunctionDensity);
     free(pars->Gauge);
+    free(pars->InputFilename);
+    free(pars->SecondOrderPotentialFile);
 
     return 0;
 }

@@ -68,14 +68,23 @@ int main(int argc, char *argv[]) {
     double BoxLen;
     int N;
 
-    char field_fname[50] = "phi.hdf5";
-    if (verbose) printf("Reading input field from %s.\n", field_fname);
-    readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, field_fname);
+    if (verbose) printf("Reading input field from %s.\n", pars.InputFilename);
+    int err = readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.InputFilename);
+    if (err) {
+        printf("Error reading file %s\n", pars.InputFilename);
+        exit(1);
+    }
 
     /* We will determine the growth factors on rank 0 */
     struct growth_factors_2 gfac2;
     double D2_asymp;
-    double k_cutoff;
+
+    /* The cut-off scale */
+    const double k_cutoff = pars.CutOffScale;
+    if (k_cutoff <= 0.) {
+        printf("Specify a valid value for Simulation:CutOffScale.\n");
+        exit(1);
+    }
 
     if (rank == 0) {
 
@@ -145,16 +154,30 @@ int main(int argc, char *argv[]) {
         /* Wavenumbers for the 3D table of second-order growth factors (k,k1,k2) */
         const double k_min = 2 * M_PI / BoxLen * 0.9;
         const double k_max = 2 * M_PI / BoxLen * N * 2;
-        const int nk = 7;
+        const int nk = pars.WaveNumberSize;
+
+        if (nk <= 0) {
+            printf("Error: specify a positive number for Simulation:WaveNumberSize.\n");
+            exit(1);
+        }
 
         /* Timer */
         gettimeofday(&time_start, NULL);
 
-        /* Begin and end for the second order growth factor integration */
-        int write_tables = 1;
-        integrate_fluid_equations_2(&m, &us, &tab, &ptdat, &gfac2, a_nonrel, a_end,
-                                    nk, k_min, k_max, write_tables, verbose);
-        // import_growth_factors_2(&gfac2, nk, k_min, k_max, MPI_COMM_WORLD);
+        /* Either import the second order growth factors or integrate them */
+        if (pars.ImportGrowthFactorTables) {
+            import_growth_factors_2(&gfac2, nk, k_min, k_max, MPI_COMM_WORLD);
+        } else {
+            int write_tables = 1;
+            integrate_fluid_equations_2(&m, &us, &tab, &ptdat, &gfac2, a_nonrel,
+                                        a_end, nk, k_min, k_max, write_tables,
+                                        verbose);
+        }
+
+        /* Verify the dimensions of the fluid equations array */
+        assert(nk == gfac2.nk);
+        assert((k_min - gfac2.k[0]) / k_min < 1e-9);
+        assert((k_min - gfac2.k[nk - 1]) / k_max < 1e-9);
 
         /* Timer */
         gettimeofday(&time_inter, NULL);
@@ -166,9 +189,6 @@ int main(int argc, char *argv[]) {
         double D2_A_asymp_sum = 0;
         double D2_B_asymp_sum = 0;
         int asymp_count = 0;
-
-        /* The cut-off scale */
-        k_cutoff = 0.25;
 
         for (int i=0; i<nk; i++) {
             for (int j1=0; j1<nk; j1++) {
@@ -237,7 +257,6 @@ int main(int argc, char *argv[]) {
 
     /* Broadcast the asymptotic growth factor, cutoff, and number of wavenumbers */
     MPI_Bcast(&D2_asymp, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&k_cutoff, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(&gfac2.nk, 1, MPI_INT, 0, MPI_COMM_WORLD);
     int nk = gfac2.nk;
 
@@ -313,26 +332,44 @@ int main(int argc, char *argv[]) {
         printf("\n");
         printf("Output written to '%s'.\n", out_fname1);
 
-        /* Allocate a secondary output grid */
-        double *out2 = malloc(N * N * N * sizeof(double));
+        /* Next, we will either compute or import the traditional result of
+         * the second order potential (with EdS kernel) */
+        double *phi2_EdS;
+        if (pars.ImportSecondOrderPotential) {
+            /* Read the second order potential field */
+            double read_BoxLen;
+            int read_N;
 
-        /* Do the fast convolution with constant kernel using FFTs */
-        convolve_fft(N, BoxLen, box, out2);
+            if (verbose) printf("Reading input field from %s.\n", pars.SecondOrderPotentialFile);
+            err = readFieldFile_MPI(&phi2_EdS, &read_N, &read_BoxLen, MPI_COMM_WORLD, pars.SecondOrderPotentialFile);
+            assert(N == read_N);
+            assert(read_BoxLen == BoxLen);
+            if (err) {
+                printf("Error reading file %s\n", pars.SecondOrderPotentialFile);
+                exit(1);
+            }
+        } else {
+            /* Allocate a secondary output grid */
+            phi2_EdS = malloc(N * N * N * sizeof(double));
 
-        /* Add (D2_asymp - 1) times the EdS result, to obtain the difference
-         * from the EdS field */
+            /* Do the fast convolution with constant kernel using FFTs */
+            convolve_fft(N, BoxLen, box, phi2_EdS);
+        }
+
+        /* Add the EdS result to the partial result (without the asymptotic
+         * contribution) */
         for (int i=0; i<N*N*N; i++) {
-            out[i] += (D2_asymp - 1) * out2[i];
+            out[i] += phi2_EdS[i];
         }
 
         /* Export the output grid */
-        char out_fname2[50] = "out_difference.hdf5";
+        char out_fname2[50] = "out_perturbed.hdf5";
         writeFieldFile(out, N, BoxLen, out_fname2);
         printf("Output written to '%s'.\n", out_fname2);
 
-        /* Finally, add the remainder to obtain the total */
+        /* Finally, add (D2_asymp - 1) times the EdS result to obtain the total */
         for (int i=0; i<N*N*N; i++) {
-            out[i] += 1 * out2[i];
+            out[i] += (D2_asymp - 1) * phi2_EdS[i];
         }
 
         /* Export the output grid */
@@ -342,6 +379,7 @@ int main(int argc, char *argv[]) {
 
         free(out);
         free(box);
+        free(phi2_EdS);
 
         /* Free the growth factors */
         free_growth_factors_2(&gfac2);
