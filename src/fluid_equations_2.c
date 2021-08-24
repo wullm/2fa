@@ -50,6 +50,14 @@ struct ode_params_2 {
     double D_scale_1, D_scale_2;
 };
 
+/* Given that k = k1 + k2 (each a vector), determine whether a given
+ * configuration of lengths is possible, with a safety margin. We use
+ * |k1|^2 + |k2|^2 - 2|k1||k2| <= |k1 + k2| <= |k1|^2 + |k2|^2 + 2|k1||k2| */
+int configuration_is_impossible(double k, double k1, double k2) {
+    return (k*k < 0.8 * (k1*k1 + k2*k2 - 2*k1*k2) ||
+            k*k > 1.2 * (k1*k1 + k2*k2 + 2*k1*k2));
+}
+
 /* Differential equation for the first order growth factor
  * Note that this equation is w.r.t. log(a), whereas the other equations are
  * w.r.t. the first order growth factor D, computed here.
@@ -404,8 +412,7 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
 
                 /* Skip impossible configurations using |k1|^2 + |k2|^2 -
                  * 2|k1||k2| <= |k1 + k2| |k1|^2 + |k2|^2 + 2|k1||k2|) */
-                if (k*k < 0.8 * (k1*k1 + k2*k2 - 2*k1*k2) ||
-                    k*k > 1.2 * (k1*k1 + k2*k2 + 2*k1*k2)) {
+                if (configuration_is_impossible(k, k1, k2)) {
                     gfac2->D2_A[i * nk * nk + j1 * nk + j2] = 1.;
                     gfac2->D2_B[i * nk * nk + j1 * nk + j2] = 1.;
                     gfac2->D2_C1[i * nk * nk + j1 * nk + j2] = 0.;
@@ -551,6 +558,64 @@ void integrate_fluid_equations_2(struct model *m, struct units *us,
     free(ratio_dnu_dcb);
     free(ratio_dg_dcb);
     free(D_cb);
+}
+
+void compute_asymptotic_values(struct growth_factors_2 *gfac2,
+                               double *D2_A_asymp, double *D2_B_asymp,
+                               double *D2_asymp, double k_cutoff) {
+
+    /* Determine the asymptotic second order growth factor */
+    double D2_A_asymp_sum = 0;
+    double D2_B_asymp_sum = 0;
+    int asymp_count = 0;
+
+    const int nk = gfac2->nk;
+
+    for (int i=0; i<nk; i++) {
+        for (int j1=0; j1<nk; j1++) {
+            for (int j2=0; j2<nk; j2++) {
+                double k = gfac2->k[i];
+                double k1 = gfac2->k[j1];
+                double k2 = gfac2->k[j2];
+
+                /* Skip impossible configurations using |k1|^2 + |k2|^2 -
+                 * 2|k1||k2| <= |k1 + k2| |k1|^2 + |k2|^2 + 2|k1||k2|) */
+                if (configuration_is_impossible(k, k1, k2)) {
+                    continue;
+                }
+
+                if (k1 > k_cutoff && k2 > k_cutoff && k > k_cutoff) {
+                    D2_A_asymp_sum += gfac2->D2_A[i * nk * nk + j1 * nk + j2];
+                    D2_B_asymp_sum += gfac2->D2_B[i * nk * nk + j1 * nk + j2];
+                    asymp_count++;
+                }
+            }
+        }
+    }
+
+    /* Store the mean values */
+    *D2_A_asymp = D2_A_asymp_sum / asymp_count;
+    *D2_B_asymp = D2_B_asymp_sum / asymp_count;
+    *D2_asymp = 0.5 * (*D2_A_asymp + *D2_B_asymp);
+
+    /* Set skipped configurations to be on the safe side */
+    for (int i=0; i<nk; i++) {
+        for (int j1=0; j1<nk; j1++) {
+            for (int j2=0; j2<nk; j2++) {
+                double k = gfac2->k[i];
+                double k1 = gfac2->k[j1];
+                double k2 = gfac2->k[j2];
+
+                /* Skip impossible configurations using |k1|^2 + |k2|^2 -
+                 * 2|k1||k2| <= |k1 + k2| |k1|^2 + |k2|^2 + 2|k1||k2|) */
+                if (configuration_is_impossible(k, k1, k2)) {
+                    gfac2->D2_A[i * nk * nk + j1 * nk + j2] = *D2_asymp;
+                    gfac2->D2_B[i * nk * nk + j1 * nk + j2] = *D2_asymp;
+                }
+            }
+        }
+    }
+
 }
 
 void import_growth_factors_2(struct growth_factors_2 *gfac2,

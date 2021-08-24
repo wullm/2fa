@@ -186,55 +186,13 @@ int main(int argc, char *argv[]) {
         printf("\nIntegrating second order equations took %.5f s\n\n", microsec_inter/1e6);
 
         /* Determine the asymptotic second order growth factor */
-        double D2_A_asymp_sum = 0;
-        double D2_B_asymp_sum = 0;
-        int asymp_count = 0;
+        double D2_A_asymp;
+        double D2_B_asymp;
+        double D2_mean_asymp;
+        compute_asymptotic_values(&gfac2, &D2_A_asymp, &D2_B_asymp,
+                                  &D2_mean_asymp, k_cutoff);
 
-        for (int i=0; i<nk; i++) {
-            for (int j1=0; j1<nk; j1++) {
-                for (int j2=0; j2<nk; j2++) {
-                    double k = gfac2.k[i];
-                    double k1 = gfac2.k[j1];
-                    double k2 = gfac2.k[j2];
-
-                    /* Skip impossible configurations using |k1|^2 + |k2|^2 -
-                     * 2|k1||k2| <= |k1 + k2| |k1|^2 + |k2|^2 + 2|k1||k2|) */
-                    if (k*k < 0.8 * (k1*k1 + k2*k2 - 2*k1*k2) ||
-                        k*k > 1.2 * (k1*k1 + k2*k2 + 2*k1*k2)) {
-                        continue;
-                    }
-
-                    if (k1 > k_cutoff && k2 > k_cutoff && k > k_cutoff) {
-                        D2_A_asymp_sum += gfac2.D2_A[i * nk * nk + j1 * nk + j2];
-                        D2_B_asymp_sum += gfac2.D2_B[i * nk * nk + j1 * nk + j2];
-                        asymp_count++;
-                    }
-                }
-            }
-        }
-
-        double D2_A_asymp = D2_A_asymp_sum / asymp_count;
-        double D2_B_asymp = D2_B_asymp_sum / asymp_count;
-        D2_asymp = 0.5 * (D2_A_asymp + D2_B_asymp);
-
-        /* Set skipped configurations to be on the safe side */
-        for (int i=0; i<nk; i++) {
-            for (int j1=0; j1<nk; j1++) {
-                for (int j2=0; j2<nk; j2++) {
-                    double k = gfac2.k[i];
-                    double k1 = gfac2.k[j1];
-                    double k2 = gfac2.k[j2];
-
-                    /* Skip impossible configurations using |k1|^2 + |k2|^2 -
-                     * 2|k1||k2| <= |k1 + k2| |k1|^2 + |k2|^2 + 2|k1||k2|) */
-                    if (k*k < 0.8 * (k1*k1 + k2*k2 - 2*k1*k2) ||
-                        k*k > 1.2 * (k1*k1 + k2*k2 + 2*k1*k2)) {
-                        gfac2.D2_A[i * nk * nk + j1 * nk + j2] = D2_asymp;
-                        gfac2.D2_B[i * nk * nk + j1 * nk + j2] = D2_asymp;
-                    }
-                }
-            }
-        }
+        D2_asymp = D2_mean_asymp;
 
         printf("Asymptotic D2_A = %.15g\n", D2_A_asymp);
         printf("Asymptotic D2_B = %.15g\n", D2_B_asymp);

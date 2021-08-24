@@ -74,5 +74,7 @@ void free_growth_factors_2(struct growth_factors_2 *gfac_2);
 void import_growth_factors_2(struct growth_factors_2 *gfac2,
                              int nk, double k_min, double k_max,
                              MPI_Comm comm);
-
+void compute_asymptotic_values(struct growth_factors_2 *gfac2,
+                               double *D2_A_asymp, double *D2_B_asymp,
+                               double *D2_asymp, double k_cutoff);
 #endif
