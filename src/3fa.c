@@ -241,15 +241,15 @@ int main(int argc, char *argv[]) {
     const int X_min = ceil(rank * fac);
     const int X_max = ceil((rank + 1) * fac);
     const int NX = X_max - X_min;
-    const int localProblemSize = NX * N * N;
+    const long long localProblemSize = (long long) NX * N * N;
 
     /* Check that all cells have been assigned to a node */
-    int totalProblemSize;
+    long long totalProblemSize;
     MPI_Allreduce(&localProblemSize, &totalProblemSize, 1,
                    MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
-    assert(totalProblemSize == N * N * N);
+    assert(totalProblemSize == (long long) N * N * N);
 
-    printf("%03d: first = %d, last = %d, local = %d, total = %d\n", rank, X_min, X_max, localProblemSize, totalProblemSize);
+    printf("%03d: first = %d, last = %d, local = %lld, total = %lld\n", rank, X_min, X_max, localProblemSize, totalProblemSize);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
