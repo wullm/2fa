@@ -152,12 +152,8 @@ void convolve(int N, double boxlen, const double *phi, double *out,
 
     /* For diagnostics only, build a histogram in (D, k) space */
     int hist_N = 100;
-    int counts_A[hist_N * hist_N];
-    int counts_B[hist_N * hist_N];
-    for (int i = 0; i < hist_N * hist_N; i++) {
-        counts_A[i] = 0;
-        counts_B[i] = 0;
-    }
+    int *counts_A = calloc((X_max - X_min) * hist_N * hist_N, sizeof(int));
+    int *counts_B = calloc((X_max - X_min) * hist_N * hist_N, sizeof(int));
 
     /* Histogram axis sizes */
     double hist_Dmin = 1.0 - 1e-3;
@@ -166,7 +162,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     double hist_kmax = 1e1;
 
     /* Do the convolution */
-    #pragma omp parallel for reduction(+:counts_A,counts_B)
+    #pragma omp parallel for
     for (int x=X_min; x<X_max; x++) {
         for (int y=0; y<N; y++) {
             for (int z=0; z<=N/2; z++) {
@@ -242,12 +238,12 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                     int bin_D_A = (int) (((D2_A + D2_asymp) - hist_Dmin) / (hist_Dmax - hist_Dmin) * hist_N);
                     int bin_D_B = (int) (((D2_B + D2_asymp) - hist_Dmin) / (hist_Dmax - hist_Dmin) * hist_N);
                     int bin_k = (int) ((log(k) - log(hist_kmin)) / (log(hist_kmax) - log(hist_kmin)) * hist_N);
-                    int bid_A = bin_D_A * hist_N + bin_k;
-                    int bid_B = bin_D_B * hist_N + bin_k;
+                    int bid_A = (x - X_min) * hist_N * hist_N + bin_D_A * hist_N + bin_k;
+                    int bid_B = (x - X_min) * hist_N * hist_N + bin_D_B * hist_N + bin_k;
 
                     /* Deposit into the histograms */
-                    if (bid_A >= 0 && bid_A < hist_N * hist_N) counts_A[bid_A]++;
-                    if (bid_B >= 0 && bid_B < hist_N * hist_N) counts_B[bid_B]++;
+                    if (bin_D_A >= 0 && bin_D_A < hist_N && bin_k >= 0 && bin_k < hist_N) counts_A[bid_A]++;
+                    if (bin_D_B >= 0 && bin_D_B < hist_N && bin_k >= 0 && bin_k < hist_N) counts_B[bid_B]++;
 
                     /* Compute the kernel */
                     fftw_complex K = 0.5 * (D2_A * k1k1 * k2k2 - D2_B * k1k2 * k1k2) / (k * k);
@@ -299,6 +295,20 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    /* Reduce the histogram arrays */
+    int histogram_A[hist_N * hist_N];
+    int histogram_B[hist_N * hist_N];
+    for (int i = 0; i < hist_N * hist_N; i++) {
+        histogram_A[i] = 0;
+        histogram_B[i] = 0;
+        for (int x=X_min; x<X_max; x++) {
+            histogram_A[i] += counts_A[x * hist_N * hist_N + i];
+            histogram_B[i] += counts_B[x * hist_N * hist_N + i];
+        }
+    }
+    free(counts_A);
+    free(counts_B);
+
     /* For diagnostics only, write the histograms (from this rank) to file */
     char fname_A[100], fname_B[100];
     sprintf(fname_A, "histogram_A_%d.txt", rank);
@@ -306,8 +316,8 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     FILE *f_A = fopen(fname_A, "w");
     FILE *f_B = fopen(fname_B, "w");
     for (int i=0; i<hist_N * hist_N; i++) {
-        fprintf(f_A, "%d", counts_A[i]);
-        fprintf(f_B, "%d", counts_B[i]);
+        fprintf(f_A, "%d", histogram_A[i]);
+        fprintf(f_B, "%d", histogram_B[i]);
         if (i < hist_N * hist_N - 1) {
             fprintf(f_A, ",");
             fprintf(f_B, ",");
