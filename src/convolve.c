@@ -150,8 +150,23 @@ void convolve(int N, double boxlen, const double *phi, double *out,
         printf("Performing convolution.\n\n");
     }
 
+    /* For diagnostics only, build a histogram in (D, k) space */
+    int hist_N = 100;
+    int counts_A[hist_N * hist_N];
+    int counts_B[hist_N * hist_N];
+    for (int i = 0; i < hist_N * hist_N; i++) {
+        counts_A[i] = 0;
+        counts_B[i] = 0;
+    }
+
+    /* Histogram axis sizes */
+    double hist_Dmin = 1.0 - 1e-3;
+    double hist_Dmax = 1.0 + 5e-3;
+    double hist_kmin = 5e-5;
+    double hist_kmax = 1e1;
+
     /* Do the convolution */
-    #pragma omp parallel for
+    #pragma omp parallel for reduction(+:counts_A,counts_B)
     for (int x=X_min; x<X_max; x++) {
         for (int y=0; y<N; y++) {
             for (int z=0; z<=N/2; z++) {
@@ -223,6 +238,17 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                     // double D2_C1 = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_C1, ind, u);
                     // double D2_C2 = strooklat_interp_index_3d(&spline_k, &spline_k1, &spline_k2, gfac2->D2_C2, ind, u);
 
+                    /* For diagnostics only, determine the histogram bins */
+                    int bin_D_A = (int) (((D2_A + D2_asymp) - hist_Dmin) / (hist_Dmax - hist_Dmin) * hist_N);
+                    int bin_D_B = (int) (((D2_B + D2_asymp) - hist_Dmin) / (hist_Dmax - hist_Dmin) * hist_N);
+                    int bin_k = (int) ((log(k) - log(hist_kmin)) / (log(hist_kmax) - log(hist_kmin)) * hist_N);
+                    int bid_A = bin_D_A * hist_N + bin_k;
+                    int bid_B = bin_D_B * hist_N + bin_k;
+
+                    /* Deposit into the histograms */
+                    if (bid_A >= 0 && bid_A < hist_N * hist_N) counts_A[bid_A]++;
+                    if (bid_B >= 0 && bid_B < hist_N * hist_N) counts_B[bid_B]++;
+
                     /* Compute the kernel */
                     fftw_complex K = 0.5 * (D2_A * k1k1 * k2k2 - D2_B * k1k2 * k1k2) / (k * k);
                     /* And the frame-lagging terms (now included in D2_A) */
@@ -268,6 +294,27 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     /* Free all the intermediate grids */
     free(fphi);
     free(fout);
+
+    /* What is our rank? */
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    /* For diagnostics only, write the histograms (from this rank) to file */
+    char fname_A[100], fname_B[100];
+    sprintf(fname_A, "histogram_A_%d.txt", rank);
+    sprintf(fname_B, "histogram_B_%d.txt", rank);
+    FILE *f_A = fopen(fname_A, "w");
+    FILE *f_B = fopen(fname_B, "w");
+    for (int i=0; i<hist_N * hist_N; i++) {
+        fprintf(f_A, "%d", counts_A[i]);
+        fprintf(f_B, "%d", counts_B[i]);
+        if (i < hist_N * hist_N - 1) {
+            fprintf(f_A, ",");
+            fprintf(f_B, ",");
+        }
+    }
+    fclose(f_A);
+    fclose(f_B);
 
     /* Free the splines */
     free_strooklat_spline(&spline_k);
