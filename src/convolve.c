@@ -303,7 +303,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     for (int i = 0; i < hist_N * hist_N; i++) {
         histogram_A[i] = 0;
         histogram_B[i] = 0;
-        for (int x=X_min; x<X_max; x++) {
+        for (int x=0; x<X_max - X_min; x++) {
             histogram_A[i] += counts_A[x * hist_N * hist_N + i];
             histogram_B[i] += counts_B[x * hist_N * hist_N + i];
         }
