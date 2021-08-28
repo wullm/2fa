@@ -151,6 +151,8 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     }
 
     /* For diagnostics only, build a histogram in (D, k) space */
+    /* We collect a version of the histogram on each X slice and sum them
+     * later to prevent race conditions. */
     int hist_N = 100;
     int *counts_A = calloc((X_max - X_min) * hist_N * hist_N, sizeof(int));
     int *counts_B = calloc((X_max - X_min) * hist_N * hist_N, sizeof(int));
@@ -295,7 +297,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    /* Reduce the histogram arrays */
+    /* Sum the histogram arrays from each X slice */
     int histogram_A[hist_N * hist_N];
     int histogram_B[hist_N * hist_N];
     for (int i = 0; i < hist_N * hist_N; i++) {
