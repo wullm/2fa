@@ -299,7 +299,7 @@ int main(int argc, char *argv[]) {
             int read_N;
 
             if (verbose) printf("Reading input field from %s.\n", pars.SecondOrderPotentialFile);
-            err = readFieldFile_MPI(&phi2_EdS, &read_N, &read_BoxLen, MPI_COMM_WORLD, pars.SecondOrderPotentialFile);
+            err = readFieldFile(&phi2_EdS, &read_N, &read_BoxLen, pars.SecondOrderPotentialFile);
             assert(N == read_N);
             assert(read_BoxLen == BoxLen);
             if (err) {
