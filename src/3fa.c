@@ -297,7 +297,7 @@ int main(int argc, char *argv[]) {
         printf("\nWork distribution:\n");
         for (int i = 0; i < MPI_Rank_Count; i++) {
             printf("%d %d %d %lld\n", i, X_edges[i], X_edges[i+1],
-                 relevant_cells_interval(X_edges[i-1], X_edges[i], work_at_x));
+                 relevant_cells_interval(X_edges[i], X_edges[i+1], work_at_x));
         }
 
         /* Timer */
