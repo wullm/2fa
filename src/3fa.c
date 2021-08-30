@@ -30,13 +30,13 @@
 
 #include "../include/3fa.h"
 
-int count_relevant_cells(double boxlen, int N, int X_min, int X_max, double k_cutoff) {
+void count_relevant_cells(double boxlen, int N, double k_cutoff, long long *work_at_x) {
     const double k_cutoff2 = k_cutoff * k_cutoff;
     const double dk = 2.0 * M_PI / boxlen;
 
-    long long count = 0;
+    for (int x=0; x<N; x++) {
+        work_at_x[x] = 0;
 
-    for (int x=X_min; x<X_max; x++) {
         for (int y=0; y<N; y++) {
             for (int z=0; z<=N/2; z++) {
                 /* Calculate the wavevector */
@@ -46,11 +46,17 @@ int count_relevant_cells(double boxlen, int N, int X_min, int X_max, double k_cu
                 if (k == 0.) continue; //skip the DC mode
                 if (k*k >= 4.0 * k_cutoff2) continue;
 
-                count++;
+                work_at_x[x]++;
             }
         }
     }
+}
 
+long long relevant_cells_interval(int X_min, int X_max, long long *work_at_x) {
+    long long count = 0;
+    for (int x = X_min; x < X_max; x++) {
+        count += work_at_x[x];
+    }
     return count;
 }
 
@@ -264,16 +270,34 @@ int main(int argc, char *argv[]) {
     int X_edges[MPI_Rank_Count + 1];
     if (rank == 0 && MPI_Rank_Count > 1) {
         printf("Determining distribution of work over the ranks.\n");
-        long long total_work = count_relevant_cells(BoxLen, N, 0, N, k_cutoff);
+
+        /* Determine how much work there is in total. */
+        long long *work_at_x = malloc(N * sizeof(long long));
+        count_relevant_cells(BoxLen, N, k_cutoff, work_at_x);
+        long long total_work = relevant_cells_interval(0, N, work_at_x);
         long long expected_work = total_work / MPI_Rank_Count;
 
+        /* Determine the grid intervals that each rank will operate on */
         X_edges[0] = 0;
         for (int i = 1; i < MPI_Rank_Count + 1; i++) {
             X_edges[i] = X_edges[i-1] + 1;
-            while(count_relevant_cells(BoxLen, N, X_edges[i-1], X_edges[i], k_cutoff) < expected_work
+            while(relevant_cells_interval(X_edges[i-1], X_edges[i], work_at_x) < 0.95 * expected_work
                   && X_edges[i] < N) {
                 X_edges[i]++;
             }
+
+            /* Make sure that all the work is accounted for */
+            if (i == MPI_Rank_Count) {
+                X_edges[i] = N;
+            }
+        }
+
+        free(work_at_x);
+
+        printf("\nWork distribution:\n");
+        for (int i = 0; i < MPI_Rank_Count; i++) {
+            printf("%d %d %d %lld\n", i, X_edges[i], X_edges[i+1],
+                 relevant_cells_interval(X_edges[i-1], X_edges[i], work_at_x));
         }
 
         /* Timer */
@@ -302,8 +326,7 @@ int main(int argc, char *argv[]) {
                    MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
     assert(totalProblemSize == (long long) N * N * N);
 
-    long long local_work = count_relevant_cells(BoxLen, N, X_min, X_max, k_cutoff);
-    printf("%03d: first = %d, last = %d, local = %lld, total = %lld, work = %lld\n", rank, X_min, X_max, localProblemSize, totalProblemSize, local_work);
+    printf("%03d: first = %d, last = %d, local = %lld, total = %lld\n", rank, X_min, X_max, localProblemSize, totalProblemSize);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
