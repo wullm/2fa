@@ -30,6 +30,30 @@
 
 #include "../include/3fa.h"
 
+int count_relevant_cells(double boxlen, int N, int X_min, int X_max, double k_cutoff) {
+    const double k_cutoff2 = k_cutoff * k_cutoff;
+    const double dk = 2.0 * M_PI / boxlen;
+
+    long long count = 0;
+
+    for (int x=X_min; x<X_max; x++) {
+        for (int y=0; y<N; y++) {
+            for (int z=0; z<=N/2; z++) {
+                /* Calculate the wavevector */
+                double kx,ky,kz,k;
+                fft_wavevector(x, y, z, N, dk, &kx, &ky, &kz, &k);
+
+                if (k == 0.) continue; //skip the DC mode
+                if (k*k >= 4.0 * k_cutoff2) continue;
+
+                count++;
+            }
+        }
+    }
+
+    return count;
+}
+
 int main(int argc, char *argv[]) {
     if (argc == 1) {
         printf("No parameter file specified.\n");
@@ -37,7 +61,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Timer quantities */
-    struct timeval time_stop, time_inter, time_start;
+    struct timeval time_stop, time_inter, time_work, time_start;
 
     /* 3FA structures */
     struct params pars;
@@ -236,10 +260,39 @@ int main(int argc, char *argv[]) {
     MPI_Bcast(gfac2.D2_C2, nk * nk * nk, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(gfac2.D2_naive, nk * nk * nk, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
+    /* Determine an equitable distribution of work over the ranks */
+    int X_edges[MPI_Rank_Count + 1];
+    if (rank == 0 && MPI_Rank_Count > 1) {
+        printf("Determining distribution of work over the ranks.\n");
+        long long total_work = count_relevant_cells(BoxLen, N, 0, N, k_cutoff);
+        long long expected_work = total_work / MPI_Rank_Count;
+
+        X_edges[0] = 0;
+        for (int i = 1; i < MPI_Rank_Count + 1; i++) {
+            X_edges[i] = X_edges[i-1] + 1;
+            while(count_relevant_cells(BoxLen, N, X_edges[i-1], X_edges[i], k_cutoff) < expected_work
+                  && X_edges[i] < N) {
+                X_edges[i]++;
+            }
+        }
+
+        /* Timer */
+        gettimeofday(&time_work, NULL);
+        long unsigned microsec = (time_work.tv_sec - time_inter.tv_sec) * 1000000
+                                + time_work.tv_usec - time_inter.tv_usec;
+        printf("The work distribution took %.5f s\n\n", microsec/1e6);
+    } else {
+        X_edges[0] = 0;
+        X_edges[1] = N;
+        gettimeofday(&time_work, NULL);
+    }
+
+    /* Broadcast the edges of the grid that each node will operate on */
+    MPI_Bcast(X_edges, MPI_Rank_Count + 1, MPI_INT, 0, MPI_COMM_WORLD);
+
     /* Divide the problem over the MPI ranks */
-    const double fac = (double) N / MPI_Rank_Count;
-    const int X_min = ceil(rank * fac);
-    const int X_max = ceil((rank + 1) * fac);
+    const int X_min = X_edges[rank];
+    const int X_max = X_edges[rank + 1];
     const int NX = X_max - X_min;
     const long long localProblemSize = (long long) NX * N * N;
 
@@ -249,7 +302,8 @@ int main(int argc, char *argv[]) {
                    MPI_LONG_LONG, MPI_SUM, MPI_COMM_WORLD);
     assert(totalProblemSize == (long long) N * N * N);
 
-    printf("%03d: first = %d, last = %d, local = %lld, total = %lld\n", rank, X_min, X_max, localProblemSize, totalProblemSize);
+    long long local_work = count_relevant_cells(BoxLen, N, X_min, X_max, k_cutoff);
+    printf("%03d: first = %d, last = %d, local = %lld, total = %lld, work = %lld\n", rank, X_min, X_max, localProblemSize, totalProblemSize, local_work);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -280,8 +334,8 @@ int main(int argc, char *argv[]) {
 
         /* Timer */
         gettimeofday(&time_stop, NULL);
-        long unsigned microsec = (time_stop.tv_sec - time_inter.tv_sec) * 1000000
-                               + time_stop.tv_usec - time_inter.tv_usec;
+        long unsigned microsec = (time_stop.tv_sec - time_work.tv_sec) * 1000000
+                               + time_stop.tv_usec - time_work.tv_usec;
         printf("\nThe convolution took %.5f s\n", microsec/1e6);
 
         /* Export the partial result */
