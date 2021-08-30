@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
     int N;
 
     if (verbose) printf("Reading input field from %s.\n", pars.InputFilename);
-    int err = readFieldFile_MPI(&box, &N, &BoxLen, MPI_COMM_WORLD, pars.InputFilename);
+    int err = readFieldFile(&box, &N, &BoxLen, pars.InputFilename);
     if (err) {
         printf("Error reading file %s\n", pars.InputFilename);
         exit(1);
