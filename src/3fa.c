@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
 
         /* Wavenumbers for the 3D table of second-order growth factors (k,k1,k2) */
         const double k_min = 2 * M_PI / BoxLen * 0.9;
-        const double k_max = 2 * M_PI / BoxLen * N * 2;
+        const double k_max = 2 * M_PI / BoxLen * N * 1.1;
         const int nk = pars.WaveNumberSize;
 
         if (nk <= 0) {
