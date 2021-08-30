@@ -276,6 +276,7 @@ int main(int argc, char *argv[]) {
         count_relevant_cells(BoxLen, N, k_cutoff, work_at_x);
         long long total_work = relevant_cells_interval(0, N, work_at_x);
         long long expected_work = total_work / MPI_Rank_Count;
+        printf("Total work %lld\n", total_work);
 
         /* Determine the grid intervals that each rank will operate on */
         X_edges[0] = 0;
@@ -292,13 +293,13 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        free(work_at_x);
-
         printf("\nWork distribution:\n");
         for (int i = 0; i < MPI_Rank_Count; i++) {
-            printf("%d %d %d %lld\n", i, X_edges[i], X_edges[i+1],
-                 relevant_cells_interval(X_edges[i], X_edges[i+1], work_at_x));
+            long long work = relevant_cells_interval(0, 10, work_at_x);
+            printf("%d %d %d %lld\n", i, X_edges[i], X_edges[i+1], work);
         }
+
+        free(work_at_x);
 
         /* Timer */
         gettimeofday(&time_work, NULL);
