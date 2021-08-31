@@ -425,6 +425,11 @@ int main(int argc, char *argv[]) {
     // bzero(out, N * N * N * sizeof(double));
     convolve(N, BoxLen, box, out, &gfac2, k_cutoff, D2_asymp, X_min, X_max, verbose);
 
+    /* Export the local version of the grid (we use gzip, so relatively cheap) */
+    char out_fname_local[50];
+    sprintf(out_fname_local, "local_partial_%d.hdf5", rank);
+    writeFieldFileCompressed(out, N, BoxLen, out_fname_local, 0); // 0 = lossless
+
     MPI_Barrier(MPI_COMM_WORLD);
 
     /* Reduce the partial solutions to convolution in Fourier space */
@@ -451,7 +456,7 @@ int main(int argc, char *argv[]) {
 
         /* Export the partial result */
         char out_fname1[50] = "out_partial.hdf5";
-        writeFieldFile(out, N, BoxLen, out_fname1);
+        writeFieldFileCompressed(out, N, BoxLen, out_fname1, 0); // 0 = lossless
         printf("\n");
         printf("Output written to '%s'.\n", out_fname1);
 
@@ -487,7 +492,7 @@ int main(int argc, char *argv[]) {
 
         /* Export the output grid */
         char out_fname2[50] = "out_perturbed.hdf5";
-        writeFieldFile(out, N, BoxLen, out_fname2);
+        writeFieldFileCompressed(out, N, BoxLen, out_fname2, 0); // 0 = lossless
         printf("Output written to '%s'.\n", out_fname2);
 
         /* Finally, add (D2_asymp - 1) times the EdS result to obtain the total */
@@ -497,7 +502,7 @@ int main(int argc, char *argv[]) {
 
         /* Export the output grid */
         char out_fname3[50] = "out_total.hdf5";
-        writeFieldFile(out, N, BoxLen, out_fname3);
+        writeFieldFileCompressed(out, N, BoxLen, out_fname3, 0); // 0 = lossless
         printf("Output written to '%s'.\n", out_fname3);
 
         free(out);

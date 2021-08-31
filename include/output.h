@@ -32,5 +32,7 @@ hid_t openFile_MPI(MPI_Comm comm, const char *fname);
 /* Methods for contiguous arrays (analogous to MPI versions in output_mpi.h) */
 int writeFieldFile(const double *box, int N, double box_len, const char *fname);
 int writeFieldData(const double *box, hid_t h_file);
+int writeFieldFileCompressed(const double *box, int N, double box_len,
+                             const char *fname, int digits);
 
 #endif

@@ -145,3 +145,78 @@ int writeFieldData(const double *box, hid_t h_file) {
 
     return 0;
 }
+
+/* Write a field file as floats with a lossy compression filter, specified
+ * by the number of digits after the decimal to keep. (The rest will be filled
+ * with rubbish). */
+int writeFieldFileCompressed(const double *box, int N, double boxlen,
+                             const char *fname, int digits) {
+    /* Create the hdf5 file */
+    hid_t h_file = H5Fcreate(fname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create the Header group */
+    hid_t h_grp = H5Gcreate(h_file, "/Header", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create dataspace for BoxSize attribute */
+    const hsize_t arank = 1;
+    const hsize_t adims[1] = {3}; //3D space
+    hid_t h_aspace = H5Screate_simple(arank, adims, NULL);
+
+    /* Create the BoxSize attribute and write the data */
+    hid_t h_attr = H5Acreate1(h_grp, "BoxSize", H5T_NATIVE_DOUBLE, h_aspace, H5P_DEFAULT);
+    double boxsize[3] = {boxlen, boxlen, boxlen};
+    H5Awrite(h_attr, H5T_NATIVE_DOUBLE, boxsize);
+
+    /* Close the attribute, corresponding dataspace, and the Header group */
+    H5Aclose(h_attr);
+    H5Sclose(h_aspace);
+    H5Gclose(h_grp);
+
+    /* Create the Field group */
+    h_grp = H5Gcreate(h_file, "/Field", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+    /* Create dataspace for the field */
+    const hsize_t frank = 3;
+    const hsize_t fdims[3] = {N, N, N}; //3D space
+    hid_t h_fspace = H5Screate_simple(frank, fdims, NULL);
+
+    /* Determine chunk size (chosen to get ~1MB per chunk) */
+    hsize_t chunk_size[3];
+    if (N < 64) {
+        chunk_size[0] = chunk_size[1] = chunk_size[2] = N;
+    } else {
+        chunk_size[0] = chunk_size[1] = chunk_size[2] = 64;
+    }
+
+    /* Prepare the dataset properties */
+    hid_t h_prop = H5Pcreate(H5P_DATASET_CREATE);
+
+    /* Set chunking */
+    H5Pset_chunk(h_prop, 3, chunk_size);
+
+    /* Set lossy filter (keep "digits" digits after the decimal point) */
+    if (digits > 0) {
+        H5Pset_scaleoffset(h_prop, H5Z_SO_FLOAT_DSCALE, digits);
+    }
+
+    /* Set shuffle and lossless compression filters (GZIP level 4) */
+    H5Pset_shuffle(h_prop);
+    H5Pset_deflate(h_prop, 4);
+
+    /* Create the dataset for the field */
+    hid_t h_data = H5Dcreate(h_grp, "Field", H5T_NATIVE_FLOAT, h_fspace,
+                             H5P_DEFAULT, h_prop, H5P_DEFAULT);
+
+    /* Write the data */
+    H5Dwrite(h_data, H5T_NATIVE_DOUBLE, h_fspace, h_fspace, H5P_DEFAULT, box);
+
+    /* Close the dataset, corresponding dataspace, and the Field group */
+    H5Dclose(h_data);
+    H5Sclose(h_fspace);
+    H5Gclose(h_grp);
+
+    /* Close the file */
+    H5Fclose(h_file);
+
+    return 0;
+}
