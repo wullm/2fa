@@ -34,6 +34,60 @@ void count_relevant_cells(double boxlen, int N, double k_cutoff, long long *work
     const double k_cutoff2 = k_cutoff * k_cutoff;
     const double dk = 2.0 * M_PI / boxlen;
 
+    /* Determine how many cells in the inner loop are below the cut-off */
+    long long relevant_cells = 0;
+    for (int x1=0; x1<N; x1++) {
+        for (int y1=0; y1<N; y1++) {
+            for (int z1=0; z1<N; z1++) {
+                double k1x = (x1 > N/2) ? (x1 - N) * dk : x1 * dk;
+                double k1y = (y1 > N/2) ? (y1 - N) * dk : y1 * dk;
+                double k1z = (z1 > N/2) ? (z1 - N) * dk : z1 * dk;
+                double k1k1 = (k1x * k1x) + (k1y * k1y) + (k1z * k1z);
+
+                /* Skip the DC mode */
+                if (k1k1 == 0.) continue;
+
+                relevant_cells += (k1k1 < k_cutoff2);
+            }
+        }
+    }
+
+    printf("There are %lld relevant cells in the inner loop.\n", relevant_cells);
+
+    /* Allocate memory for pre-computed inner loop quantities */
+    int *x1_vec = malloc(relevant_cells * sizeof(int));
+    int *y1_vec = malloc(relevant_cells * sizeof(int));
+    int *z1_vec = malloc(relevant_cells * sizeof(int));
+
+    /* Pre-compute the inner loop quantities */
+    int count = 0;
+    for (int x1=0; x1<N; x1++) {
+        for (int y1=0; y1<N; y1++) {
+            for (int z1=0; z1<N; z1++) {
+                /* Calculate the first wavevector */
+                double k1x = (x1 > N/2) ? (x1 - N) * dk : x1 * dk;
+                double k1y = (y1 > N/2) ? (y1 - N) * dk : y1 * dk;
+                double k1z = (z1 > N/2) ? (z1 - N) * dk : z1 * dk;
+                double k1k1 = (k1x * k1x) + (k1y * k1y) + (k1z * k1z);
+
+                /* Skip irrelevant cells */
+                if (k1k1 >= k_cutoff2) continue;
+
+                /* Skip the DC mode */
+                if (k1k1 == 0.) continue;
+
+                /* Store the cell index */
+                x1_vec[count] = x1;
+                y1_vec[count] = y1;
+                z1_vec[count] = z1;
+
+                count++;
+            }
+        }
+    }
+
+    printf("Done with pre-computation of the inner loop.\n");
+
     for (int x=0; x<N; x++) {
         work_at_x[x] = 0;
 
@@ -46,10 +100,43 @@ void count_relevant_cells(double boxlen, int N, double k_cutoff, long long *work
                 if (k == 0.) continue; //skip the DC mode
                 if (k*k >= 4.0 * k_cutoff2) continue;
 
-                work_at_x[x]++;
+                /* Sample the inner loop */
+                for (int sample = 0; sample < 10; sample++) {
+                    int local_count = rand() % relevant_cells;
+
+                    /* Fetch the indices of the first wavevector */
+                    int x1 = x1_vec[local_count];
+                    int y1 = y1_vec[local_count];
+                    int z1 = z1_vec[local_count];
+
+                    /* The first and second wavevectors sum up to k */
+                    int x2 = wrap(x - x1, N);
+                    int y2 = wrap(y - y1, N);
+                    int z2 = wrap(z - z1, N);
+
+                    /* Compute the second wave vector */
+                    double k2x = (x2 > N/2) ? (x2 - N) * dk : x2 * dk;
+                    double k2y = (y2 > N/2) ? (y2 - N) * dk : y2 * dk;
+                    double k2z = (z2 > N/2) ? (z2 - N) * dk : z2 * dk;
+                    double k2k2 = (k2x * k2x) + (k2y * k2y) + (k2z * k2z);
+
+                    /* Skip the DC mode */
+                    if (k2k2 == 0.) continue;
+
+                    /* Skip irrelevant cells */
+                    if (k2k2 >= k_cutoff2) continue;
+
+                    work_at_x[x]++;
+                }
+
             }
         }
     }
+
+    /* Free memory from the inner loop */
+    free(x1_vec);
+    free(y1_vec);
+    free(z1_vec);
 }
 
 long long relevant_cells_interval(int X_min, int X_max, long long *work_at_x) {
