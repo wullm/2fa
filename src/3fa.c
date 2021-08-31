@@ -368,7 +368,7 @@ int main(int argc, char *argv[]) {
         /* Determine the grid intervals that each rank will operate on */
         X_edges[0] = 0;
         for (int i = 1; i < MPI_Rank_Count + 1; i++) {
-            X_edges[i] = X_edges[i-1] + 1;
+            X_edges[i] = X_edges[i-1];
             while(relevant_cells_interval(X_edges[i-1], X_edges[i], work_at_x) < 0.95 * expected_work
                   && X_edges[i] < N) {
                 X_edges[i]++;
