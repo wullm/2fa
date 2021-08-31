@@ -290,6 +290,7 @@ void convolve(int N, double boxlen, const double *phi, double *out,
         long unsigned microsec = (time_now.tv_sec - time_start.tv_sec) * 1000000
                                 + time_now.tv_usec - time_start.tv_usec;
         fprintf(f, "%d %lu\n", x, microsec);
+        fflush(f);
     }
     fclose(f);
 
