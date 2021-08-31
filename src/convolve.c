@@ -154,8 +154,8 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     /* We collect a version of the histogram on each X slice and sum them
      * later to prevent race conditions. */
     int hist_N = 100;
-    int *counts_A = calloc((X_max - X_min) * hist_N * hist_N, sizeof(int));
-    int *counts_B = calloc((X_max - X_min) * hist_N * hist_N, sizeof(int));
+    long long *counts_A = calloc((X_max - X_min) * hist_N * hist_N, sizeof(long long));
+    long long *counts_B = calloc((X_max - X_min) * hist_N * hist_N, sizeof(long long));
 
     /* Histogram axis sizes */
     double hist_Dmin = 1.0 - 1e-3;
@@ -298,8 +298,8 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     /* Sum the histogram arrays from each X slice */
-    int histogram_A[hist_N * hist_N];
-    int histogram_B[hist_N * hist_N];
+    long long histogram_A[hist_N * hist_N];
+    long long histogram_B[hist_N * hist_N];
     for (int i = 0; i < hist_N * hist_N; i++) {
         histogram_A[i] = 0;
         histogram_B[i] = 0;
@@ -318,8 +318,8 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     FILE *f_A = fopen(fname_A, "w");
     FILE *f_B = fopen(fname_B, "w");
     for (int i=0; i<hist_N * hist_N; i++) {
-        fprintf(f_A, "%d", histogram_A[i]);
-        fprintf(f_B, "%d", histogram_B[i]);
+        fprintf(f_A, "%lld", histogram_A[i]);
+        fprintf(f_B, "%lld", histogram_B[i]);
         if (i < hist_N * hist_N - 1) {
             fprintf(f_A, ",");
             fprintf(f_B, ",");
