@@ -22,6 +22,7 @@
 #include <string.h>
 #include <hdf5.h>
 #include <math.h>
+#include <sys/time.h>
 
 #include "../include/convolve.h"
 #include "../include/fft.h"
@@ -157,6 +158,19 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     long long *counts_A = calloc((X_max - X_min) * hist_N * hist_N, sizeof(long long));
     long long *counts_B = calloc((X_max - X_min) * hist_N * hist_N, sizeof(long long));
 
+    /* What is our rank? */
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    /* Keep track in a file, for each rank, the progress of the convolution */
+    char fname_progress[100];
+    sprintf(fname_progress, "progress_%d.txt", rank);
+    FILE *f = fopen(fname_progress, "w");
+
+    /* Timer quantities */
+    struct timeval time_now, time_start;
+    gettimeofday(&time_start, NULL);
+
     /* Histogram axis sizes */
     double hist_Dmin = 1.0 - 1e-3;
     double hist_Dmax = 1.0 + 5e-3;
@@ -272,8 +286,12 @@ void convolve(int N, double boxlen, const double *phi, double *out,
                 fout[id] = local_sum;
             }
         }
-        if (x % 10 == 0) printf("%d / %d\n", x, N);
+        gettimeofday(&time_now, NULL);
+        long unsigned microsec = (time_now.tv_sec - time_start.tv_sec) * 1000000
+                                + time_now.tv_usec - time_start.tv_usec;
+        fprintf(f, "%d %lu\n", x, microsec);
     }
+    fclose(f);
 
     /* Free the memory of the inner loop pre-computations */
     free(phi_k1);
@@ -292,10 +310,6 @@ void convolve(int N, double boxlen, const double *phi, double *out,
     /* Free all the intermediate grids */
     free(fphi);
     free(fout);
-
-    /* What is our rank? */
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     /* Sum the histogram arrays from each X slice */
     long long histogram_A[hist_N * hist_N];
