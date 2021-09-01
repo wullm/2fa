@@ -361,16 +361,25 @@ int main(int argc, char *argv[]) {
         /* Determine how much work there is in total. */
         long long *work_at_x = malloc(N * sizeof(long long));
         count_relevant_cells(BoxLen, N, k_cutoff, work_at_x);
-        long long total_work = relevant_cells_interval(0, N, work_at_x);
-        long long expected_work = total_work / MPI_Rank_Count;
+        const long long total_work = relevant_cells_interval(0, N, work_at_x);
+        const long long expected_work = total_work / MPI_Rank_Count;
         printf("Total work %lld\n", total_work);
+
+        /* Parameters for the work assignment */
+        const double greedy_fraction = pars.GreedyFraction;
+        const double length_penalty = pars.LengthPenalty;
+        printf("Greedy fraction = %g\n", greedy_fraction);
+        printf("Length penality = %g\n", length_penalty);
 
         /* Determine the grid intervals that each rank will operate on */
         X_edges[0] = 0;
         for (int i = 1; i < MPI_Rank_Count + 1; i++) {
+            double penalty = 1.0;
+            long long work = 0;
             X_edges[i] = X_edges[i-1];
-            while(relevant_cells_interval(X_edges[i-1], X_edges[i], work_at_x) < 0.95 * expected_work
-                  && X_edges[i] < N) {
+            while(work * penalty < greedy_fraction * expected_work && X_edges[i] < N) {
+                work = relevant_cells_interval(X_edges[i-1], X_edges[i], work_at_x);
+                penalty *= length_penalty;
                 X_edges[i]++;
             }
 

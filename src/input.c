@@ -41,6 +41,10 @@ int readParams(struct params *pars, const char *fname) {
      pars->WaveNumberSize = ini_getl("Simulation", "WaveNumberSize", 100, fname);
      pars->ImportGrowthFactorTables = ini_getl("Simulation", "ImportGrowthFactorTables", 0, fname);
 
+     /* Work distribution parameters */
+     pars->GreedyFraction = ini_getd("Distribution", "GreedyFraction", 1.0, fname);
+     pars->LengthPenalty = ini_getd("Distribution", "LengthPenalty", 1.0, fname);
+
      /* Read strings */
      int len = DEFAULT_STRING_LENGTH;
      pars->OutputDirectory = malloc(len);

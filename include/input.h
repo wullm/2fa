@@ -49,6 +49,10 @@ struct params {
     int WaveNumberSize;
     int ImportGrowthFactorTables;
 
+    /* Parameters for the work distribution */
+    double GreedyFraction;
+    double LengthPenalty;
+
     /* Input parameters */
     char *InputFilename;
     char *SecondOrderPotentialFile;
